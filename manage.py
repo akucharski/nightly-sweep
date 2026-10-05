@@ -19,6 +19,7 @@ Changes apply to a running dashboard immediately.
 
 import argparse
 import getpass
+import os
 import sys
 import time
 from datetime import datetime
@@ -26,7 +27,7 @@ from datetime import datetime
 import auth
 import triage  # noqa: F401  (loads .env, for the Google settings shown by `status`)
 
-DEFAULT_URL = "http://127.0.0.1:8765"
+DEFAULT_URL = os.environ.get("PUBLIC_URL", "").rstrip("/") or "http://127.0.0.1:8765"
 
 
 def fail(msg):

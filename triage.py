@@ -34,7 +34,7 @@ import requests
 ENV_FILE_KEYS = set()     # names defined in .env, the only keys a custom provider may use
 
 
-def load_env(path=os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")):
+def load_env(path=os.environ.get("ENV_FILE") or os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")):
     """Read KEY=value lines from .env next to this script. A key already set in
     the environment wins, so `export` still overrides the file."""
     try:

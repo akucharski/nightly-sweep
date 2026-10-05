@@ -31,7 +31,7 @@ from urllib.parse import urlencode
 
 import requests
 
-DIR = Path(__file__).resolve().parent / "auth"
+DIR = Path(os.environ.get("DATA_DIR") or Path(__file__).resolve().parent) / "auth"   # DATA_DIR: a hosted disk
 USERS, SESSIONS, LINKS = DIR / "users.json", DIR / "sessions.json", DIR / "links.json"
 
 SESSION_IDLE = 24 * 3600         # over 20 hours, so WCAG 2.2.1 needs no timeout warning

@@ -1,0 +1,31 @@
+# Render Blueprint: Dashboard → New → Blueprint → pick this repository.
+# One web service with a persistent disk for projects, results and accounts.
+services:
+  - type: web
+    name: nightly-sweep
+    runtime: python
+    plan: starter                  # persistent disks need a paid plan
+    buildCommand: pip install -r requirements.txt
+    startCommand: python dashboard.py --host 0.0.0.0
+    healthCheckPath: /login
+    disk:
+      name: data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: PYTHONUNBUFFERED      # log lines appear immediately
+        value: "1"
+      - key: DATA_DIR              # projects/ and auth/ live on the disk
+        value: /var/data
+      - key: ENV_FILE              # add a Secret File named .env with your API keys
+        value: /etc/secrets/.env
+      - key: COOKIE_SECURE
+        value: "1"
+      - key: PUBLIC_URL            # e.g. https://nightly-sweep.onrender.com
+        sync: false
+      - key: ADMIN_USERNAME        # first admin, created once at first start
+        sync: false
+      - key: ADMIN_PASSWORD        # 12+ characters; remove after first sign-in
+        sync: false

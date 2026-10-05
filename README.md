@@ -185,3 +185,21 @@ Nightly, from cron:
 0 3 * * *  cd /opt/nightly-sweep && .venv/bin/python agent.py https://www.example.gov --mail-to webteam@example.gov >> agent-runs/cron.log 2>&1
 ```
 
+## Deploy to Render
+
+`render.yaml` sets up one web service with a 1 GB persistent disk (a paid Starter plan, because
+free services have no disk).
+
+1. In Render: **New → Blueprint**, pick this GitHub repository, and fill in the three settings it asks for:
+   - `PUBLIC_URL`: the service's address, e.g. `https://nightly-sweep.onrender.com`
+   - `ADMIN_USERNAME` and `ADMIN_PASSWORD`: the first admin account (password 12+ characters)
+2. In the service's **Environment → Secret Files**, add a file named `.env` containing your keys,
+   exactly as on your Mac (`ANTHROPIC_API_KEY=…`, `GEMINI_API_KEY=…`).
+3. Deploy, open the address, and sign in. Then delete `ADMIN_PASSWORD` from the settings. It is only
+   used when there are no accounts at all.
+
+Projects, results and accounts are kept on the disk (`DATA_DIR=/var/data`), cookies are marked secure,
+and keys are read from the secret file (`ENV_FILE`). Run one instance only: a sweep's live progress is
+held in memory. For Google sign-in, register `PUBLIC_URL/auth/google/callback` with Google.
+On your Mac none of these settings are set, so everything works as before.
+

@@ -21,6 +21,7 @@ import html
 import json
 import os
 import re
+import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -885,15 +886,34 @@ class Handler(BaseHTTPRequestHandler):
         self.send(404, {"error": "not found"})
 
 
+def bootstrap_admin():
+    """On a host with no terminal, create the first admin from ADMIN_USERNAME and ADMIN_PASSWORD.
+    Only ever when there are no accounts at all; afterwards those settings are ignored."""
+    name, password = auth.norm(os.environ.get("ADMIN_USERNAME")), os.environ.get("ADMIN_PASSWORD") or ""
+    if not name or not password or auth.has_users():
+        return
+    problem = auth.password_problem(password, name)
+    if problem:
+        print(f"  ADMIN_PASSWORD not used: {problem}")
+        return
+    auth.save_users({name: {"name": name, "email": "", "admin": True, "created": time.time(),
+                            "password": auth.hash_password(password)}})
+    print(f"  Created the first admin account, {name!r}, from ADMIN_USERNAME. You can remove "
+          "ADMIN_PASSWORD from the host's settings now.")
+
+
 def main():
+    sys.stdout.reconfigure(line_buffering=True)   # hosts read logs from a pipe; show each line at once
     ap = argparse.ArgumentParser()
-    ap.add_argument("--port", type=int, default=8765)
-    ap.add_argument("--host", default="127.0.0.1")
+    ap.add_argument("--port", type=int, default=int(os.environ.get("PORT") or 8765))   # hosts set PORT
+    ap.add_argument("--host", default=os.environ.get("HOST") or "127.0.0.1")
     args = ap.parse_args()
     shown = "127.0.0.1" if args.host in ("0.0.0.0", "::") else args.host
-    CONFIG["redirect"] = f"http://{shown}:{args.port}/auth/google/callback"
+    public = os.environ.get("PUBLIC_URL", "").rstrip("/") or f"http://{shown}:{args.port}"
+    CONFIG["redirect"] = f"{public}/auth/google/callback"
+    bootstrap_admin()
     server = ThreadingHTTPServer((args.host, args.port), Handler)
-    print(f"Nightly sweep dashboard on http://{shown}:{args.port}  (Ctrl-C to quit)")
+    print(f"Nightly sweep dashboard on {public}  (listening on {args.host}:{args.port}; Ctrl-C to quit)")
     google = auth.google_config(CONFIG["redirect"])
     if google["enabled"]:
         print(f"  Google sign-in on. Redirect URI to register with Google: {google['redirect']}")

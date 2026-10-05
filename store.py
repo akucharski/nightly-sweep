@@ -19,7 +19,7 @@ from pathlib import Path
 import triage
 from throttle import PROFILES
 
-ROOT = Path(__file__).resolve().parent / "projects"
+ROOT = Path(os.environ.get("DATA_DIR") or Path(__file__).resolve().parent) / "projects"
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 
 DEFAULT_SETTINGS = {
