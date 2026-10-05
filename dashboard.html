@@ -1,0 +1,1174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nightly Sweep</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #1b1f24; --muted: #5c6570; --line: #e3e6ea; --grid: #eceef1;
+    --field: #7d8590; --btn: #2563c9; --focus: #2563c9;
+    --accent: #2158b8; --ok: #1a7340; --warn: #8a5a10; --bad: #a8291f; --flag: #6b3fc4;
+    --ok-bg: #e6f4ec; --warn-bg: #fbf1e0; --bad-bg: #fbe7e5; --flag-bg: #efe9fb; --accent-bg: #e7effc;
+    /* chart series: colour follows the entity everywhere on the page */
+    --s-fresh: #2a78d6; --s-stale: #eb6834; --s-broken: #1baf7a; --s-dead: #4a3aa7; --s-contra: #eda100;
+    --s-unknown: #8c8b85;
+    /* status (severity / verdict), always shown with a label */
+    --st-critical: #d03b3b; --st-serious: #ec835a; --st-warning: #fab219; --st-good: #0ca30c;
+    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1216; --panel: #171b21; --ink: #e6e9ed; --muted: #9da5ae; --line: #262c34; --grid: #20252c;
+      --field: #6e7681; --focus: #8ab4ff;
+      --accent: #6ea0ff; --ok: #4cc283; --warn: #e0a84a; --bad: #f0716a; --flag: #a98bf0;
+      --ok-bg: #15291e; --warn-bg: #2e2414; --bad-bg: #331a19; --flag-bg: #241d38; --accent-bg: #172440;
+      --s-fresh: #3987e5; --s-stale: #d95926; --s-broken: #199e70; --s-dead: #9085e9; --s-contra: #c98500;
+      --s-unknown: #85857f;
+    }
+  }
+  * { box-sizing: border-box; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .skip { position: absolute; left: 16px; top: -60px; background: var(--btn); color: #fff; padding: 10px 14px; border-radius: 6px; z-index: 20; font-weight: 600; }
+  .skip:focus { top: 8px; }
+  ::placeholder { color: var(--muted); opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { *, *::before { animation: none !important; transition: none !important; } }
+  .topnav { background: var(--panel); border-bottom: 1px solid var(--line); }
+  .topnav .in { max-width: 1240px; margin: 0 auto; padding: 8px 16px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .topnav nav { display: flex; gap: 4px; }
+  .topnav nav a { color: var(--ink); text-decoration: none; padding: 8px 12px; border-radius: 6px; font-weight: 600; font-size: 14px; }
+  .topnav nav a:hover { background: var(--bg); }
+  .topnav nav a[aria-current="page"] { background: var(--accent-bg); color: var(--accent); }
+  .topnav .who { color: var(--muted); font-size: 13px; margin-left: auto; overflow-wrap: anywhere; }
+  .topnav form { margin: 0; }
+  .linkbtn { background: none; border: 0; padding: 4px 0; color: var(--accent); text-decoration: underline; font-weight: 600; cursor: pointer; font-size: inherit; }
+  .formerror { grid-column: 1 / -1; background: var(--bad-bg); color: var(--bad); border: 1px solid var(--bad); border-radius: 8px; padding: 8px 12px; font-size: 13px; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 18px 16px 60px; }
+  .titlebar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  h1 { font-size: 19px; margin: 0 8px 0 0; white-space: nowrap; }
+  .titlebar select { font-weight: 600; max-width: 260px; }
+  .sub { color: var(--muted); overflow-wrap: anywhere; }
+  .spacer { flex: 1; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 99px;
+          font-size: 12px; font-weight: 600; background: var(--line); color: var(--muted); white-space: nowrap; }
+  .pill.running { background: var(--accent-bg); color: var(--accent); }
+  .pill.done { background: var(--ok-bg); color: var(--ok); }
+  .pill.failed { background: var(--bad-bg); color: var(--bad); }
+  .pill.cancelled { background: var(--warn-bg); color: var(--warn); }
+  .pill.running::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  .banner { background: var(--accent-bg); color: var(--accent); border-radius: 8px; padding: 8px 12px; margin-bottom: 14px; font-size: 13px; }
+  .banner a { font-weight: 600; cursor: pointer; }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; min-width: 0; }
+  .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 12px; }
+  .panel-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .panel-head h2 { margin: 0; }
+  .panel-head .actions { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+  #form { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px 12px; align-items: end; }
+  .c2 { grid-column: span 2; } .c3 { grid-column: span 3; } .c6 { grid-column: 1 / -1; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); min-width: 0; }
+  input, select { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--field);
+                  border-radius: 6px; padding: 7px 9px; min-width: 0; }
+  .checks { display: flex; gap: 8px 18px; flex-wrap: wrap; align-items: center; }
+  .checks label { flex-direction: row; align-items: center; gap: 6px; color: var(--ink); font-size: 13px; }
+  .checks label input[type=number] { width: 64px; padding: 4px 6px; }
+  .buttons { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 6px; padding: 8px 16px; cursor: pointer; white-space: nowrap; }
+  button.primary { background: var(--btn); color: #fff; }
+  button.secondary { background: var(--bg); color: var(--ink); border: 1px solid var(--field); }
+  button.ghost { background: transparent; color: var(--bad); border: 1px solid var(--field); }
+  button.small { background: var(--bg); color: var(--ink); border: 1px solid var(--field); font-weight: 500; padding: 5px 10px; font-size: 12px; min-height: 28px; }
+  button:disabled { opacity: .45; cursor: default; }
+  .note { font-size: 12px; color: var(--muted); }
+  .note.warn { color: var(--warn); }
+  .note.good { color: var(--ok); }
+  .test-ai { align-self: end; } .test-ai button { width: 100%; }
+  .hidden { display: none !important; }
+
+  .stages { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+  .stage { border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; position: relative; overflow: hidden; }
+  .stage .name { font-weight: 600; font-size: 13px; }
+  .stage .state { font-size: 12px; color: var(--muted); }
+  .stage .bar { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--accent); width: 0; transition: width .4s; }
+  .stage.active { border-color: var(--accent); background: var(--accent-bg); }
+  .stage.active .state { color: var(--accent); }
+  .stage.done .state { color: var(--ok); }
+  .stage.done .bar { width: 100% !important; background: var(--ok); }
+  .stage.failed, .stage.stopped { border-color: var(--bad); }
+  .stage.failed .state, .stage.stopped .state { color: var(--bad); }
+  .stage.skipped { opacity: .5; }
+  .pace-line { margin-top: 10px; font-size: 12px; color: var(--muted); }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px; }
+  .tile { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px 10px 14px; position: relative; }
+  .tile::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--tc, var(--line)); }
+  .tile .n { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .tile .l { font-size: 12px; color: var(--muted); }
+  .tile .d { font-size: 11px; color: var(--muted); }
+
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .charts .panel { margin: 0; }
+  .charts .wide { grid-column: 1 / -1; }
+  .headline { font-size: 13px; margin: -4px 0 10px; }
+  .headline b { font-size: 18px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .chart { width: 100%; min-height: 60px; }
+  .chart svg { display: block; width: 100%; overflow: visible; }
+  .chart text { font-size: 11px; fill: var(--muted); }
+  .chart .lbl { fill: var(--ink); font-size: 12px; }
+  .empty-chart { color: var(--muted); font-size: 13px; padding: 28px 0; text-align: center; }
+  details.tbl { margin-top: 8px; font-size: 12px; }
+  details.tbl summary { color: var(--muted); cursor: pointer; padding: 4px 0; }
+  details.tbl table { min-width: 0; margin-top: 6px; }
+  .mini-wrap { overflow-x: auto; max-width: 100%; position: relative; }
+  .tip { position: fixed; pointer-events: none; z-index: 10; background: var(--ink); color: var(--panel); font-size: 12px;
+         padding: 6px 9px; border-radius: 6px; max-width: 280px; display: none; line-height: 1.4; }
+  .tip i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
+  .mixbar { display: flex; height: 14px; border-radius: 4px; overflow: hidden; background: var(--line); gap: 2px; margin: 4px 0 8px; }
+  .mixbar span { transition: width .4s; }
+  .mixbar span:first-child { border-radius: 4px 0 0 4px; } .mixbar span:last-child { border-radius: 0 4px 4px 0; }
+
+  .log { font-family: var(--mono); font-size: 12px; height: 300px; overflow: auto; background: var(--bg);
+         border-radius: 6px; padding: 8px 10px; border: 1px solid var(--line); }
+  .log div { white-space: pre; width: max-content; min-width: 100%; }
+  .log .t { color: var(--muted); margin-right: 8px; }
+  .log .bad { color: var(--bad); } .log .warn { color: var(--warn); } .log .ok { color: var(--ok); }
+  .log .flag { color: var(--flag); font-weight: 600; } .log .info { color: var(--accent); } .log .pace { color: var(--muted); }
+  details.logwrap summary { cursor: pointer; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; margin-bottom: 10px; }
+
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .tabs button.on { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+  .maintabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 12px; flex-wrap: wrap; }
+  .maintabs button { background: none; color: var(--muted); border-radius: 0; padding: 8px 12px; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .maintabs button.on { color: var(--ink); border-bottom-color: var(--accent); }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; position: relative; }
+  table { width: 100%; border-collapse: collapse; }
+  .table-wrap table { min-width: 900px; }
+  th { text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); background: var(--bg);
+       padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td { padding: 9px 10px; border-top: 1px solid var(--line); vertical-align: top; }
+  tbody tr:first-child td { border-top: 0; }
+  tr.main { cursor: pointer; }
+  tr.main:hover td { background: var(--bg); }
+  tr.detail td { border-top: 0; padding-top: 0; }
+  tr.detail { display: none; } tr.detail.open { display: table-row; }
+  .title { font-weight: 600; }
+  .url { font-size: 12px; overflow-wrap: anywhere; }
+  .tags { display: flex; gap: 4px; flex-wrap: wrap; }
+  .tag { font-size: 11px; padding: 1px 7px; border-radius: 4px; font-weight: 600; white-space: nowrap; }
+  .tag.stale { background: var(--flag-bg); color: var(--flag); }
+  .tag.broken, .tag.dead, .tag.high { background: var(--bad-bg); color: var(--bad); }
+  .tag.expired, .tag.unclear, .tag.medium, .tag.outdated { background: var(--warn-bg); color: var(--warn); }
+  .tag.live { background: var(--ok-bg); color: var(--ok); }
+  .tag.pending, .tag.none, .tag.info, .tag.low { background: var(--line); color: var(--muted); }
+  .tag.thinking { background: var(--accent-bg); color: var(--accent); animation: pulse 1.2s infinite; }
+  .quote { font-size: 12px; border-left: 3px solid var(--line); padding-left: 8px; color: var(--muted); margin-top: 4px; overflow-wrap: anywhere; }
+  .quote mark { background: var(--warn-bg); color: var(--ink); padding: 0 2px; border-radius: 2px; }
+  .detail-box { font-size: 12px; font-family: var(--mono); color: var(--muted); background: var(--bg); border-radius: 6px; padding: 8px 10px; overflow-x: auto; }
+  .detail-box div { white-space: pre; }
+  .detail-box b { font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: var(--ink); }
+  .muted { color: var(--muted); } .nowrap { white-space: nowrap; }
+  .empty { color: var(--muted); padding: 24px 0; text-align: center; }
+  a { color: var(--accent); }
+
+  .contra { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
+  .contra .top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+  .contra .top b { font-size: 14px; }
+  .contra .vs { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: stretch; }
+  .contra .side { background: var(--bg); border-radius: 6px; padding: 8px 10px; min-width: 0; }
+  .contra .side .q { font-size: 13px; margin: 4px 0; overflow-wrap: anywhere; }
+  .contra .mid { align-self: center; color: var(--muted); font-size: 12px; font-weight: 600; }
+  .contra .why { font-size: 13px; margin-top: 8px; }
+
+  .table-wrap:focus-visible, .log:focus-visible { outline-offset: 0; }
+  @media (max-width: 520px) {
+    #form { grid-template-columns: 1fr !important; }
+    .stages { grid-template-columns: repeat(2, 1fr) !important; }
+    .buttons { justify-content: stretch; } .buttons button { flex: 1; }
+  }
+  @media (max-width: 900px) {
+    #form { grid-template-columns: 1fr 1fr; }
+    .c2, .c3 { grid-column: span 1; } .c6, .full-sm { grid-column: 1 / -1; }
+    .stages { grid-template-columns: repeat(4, 1fr); }
+    .charts { grid-template-columns: 1fr; }
+    .contra .vs { grid-template-columns: 1fr; } .contra .mid { justify-self: center; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to main content</a>
+<header class="topnav">
+  <div class="in">
+    <nav aria-label="Main">
+      <a href="/dashboard" aria-current="page">Dashboard</a>
+      <a href="/docs">Documents</a>
+    </nav>
+    <span class="who" id="who"></span>
+    <form method="post" action="/logout"><button class="small" type="submit">Sign out</button></form>
+  </div>
+</header>
+<main class="wrap" id="main" tabindex="-1">
+  <div class="titlebar">
+    <h1>Nightly site sweep</h1>
+    <select id="projectSel" aria-label="Project"></select>
+    <button class="small" id="newProject">+ New project</button>
+    <span id="status" class="pill">idle</span>
+    <span class="sub" id="elapsed"></span>
+    <span class="spacer"></span>
+    <span class="sub">Read-only — nothing on the site is changed</span>
+  </div>
+  <div id="announce" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+  <div class="banner hidden" id="banner"></div>
+
+  <section class="panel">
+    <div class="panel-head"><h2 id="formTitle">Project</h2></div>
+    <form id="form" autocomplete="off">
+      <label class="c2 full-sm">Project name <input name="name" placeholder="City of Example"></label>
+      <label class="c2 full-sm">Site URL (required) <input name="site" type="url" placeholder="https://www.example.gov" required autocomplete="url"></label>
+      <label>Max pages <input name="max_pages" type="number" min="1" max="5000"></label>
+      <label>Stale after (months) <input name="stale_months" type="number" min="1"></label>
+      <label class="c2">Crawl speed <select name="speed" id="speedSel"></select></label>
+      <label class="custom">Min gap (s) <input name="custom_min" type="number" step="0.1" min="0.2"></label>
+      <label class="custom">Max gap (s) <input name="custom_max" type="number" step="0.1" min="0.2"></label>
+      <label>AI provider
+        <select name="provider" id="providerSel"><option value="anthropic">Anthropic</option><option value="xai">xAI (Grok)</option><option value="custom">Custom (OpenAI-compatible)</option></select>
+      </label>
+      <label class="c2 custom-only">Endpoint URL <input name="custom_url" type="url" placeholder="https://api.example.com/v1" spellcheck="false" aria-describedby="customHelp"></label>
+      <label class="c2 compat-ai">Model <input name="custom_model" list="modelList" placeholder="choose or type a model" spellcheck="false" autocapitalize="none" autocomplete="off"></label>
+      <datalist id="modelList"></datalist>
+      <label class="custom-only">API key from .env <select name="custom_key_env" id="keySel" aria-describedby="customHelp"></select></label>
+      <div class="compat-ai test-ai"><button type="button" class="secondary" id="loadModels">Load models</button></div>
+      <div class="compat-ai test-ai"><button type="button" class="secondary" id="testAi">Test connection</button></div>
+      <div class="note c6 preset-only" id="keyStatus"></div>
+      <div class="note c6 custom-only" id="customHelp">Any other endpoint that speaks the OpenAI chat format. Put its key in .env (for example MYSERVICE_API_KEY=…), restart the dashboard, and pick it here. Choose “None” for local models.</div>
+      <div class="note c6 compat-ai" id="testResult" role="status"></div>
+      <div class="checks c6">
+        <label><input type="checkbox" name="link_check"> Check links</label>
+        <label><input type="checkbox" name="ai"> AI triage of flagged pages</label>
+        <label><input type="checkbox" name="reuse_analysis"> Reuse AI verdicts for unchanged pages</label>
+        <label><input type="checkbox" name="contradictions"> Find contradictions</label>
+        <label for="contraGroups">Groups to compare <input type="number" id="contraGroups" name="contra_groups" min="1" max="40" aria-describedby="contraHelp"></label>
+        <span class="note" id="contraHelp">One AI call per group of related pages.</span>
+      </div>
+      <div class="formerror hidden" id="formError" role="alert"></div>
+      <div class="note c3 full-sm" id="note" aria-live="polite"></div>
+      <div class="buttons c3 full-sm">
+        <button type="button" class="ghost" id="deleteBtn">Delete project</button>
+        <button type="button" class="ghost" id="stop">Stop sweep</button>
+        <button type="submit" class="secondary" id="saveBtn">Save</button>
+        <button type="button" class="primary" id="start">Start sweep</button>
+      </div>
+    </form>
+  </section>
+
+  <div id="results">
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Run</h2>
+        <select id="runSel" aria-label="Run"></select>
+        <span class="muted" id="runInfo"></span>
+      </div>
+      <div class="stages" id="stages"></div>
+      <div class="pace-line" id="paceLine"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Counts</h2>
+      <div class="tiles" id="tiles"></div>
+    </section>
+
+    <div class="charts">
+      <section class="panel wide">
+        <h2>Content age</h2>
+        <div class="headline" id="ageHead"></div>
+        <div class="legend" id="ageLegend"></div>
+        <div class="chart" id="ageChart"></div>
+        <details class="tbl"><summary>View as table</summary><div id="ageTable"></div></details>
+      </section>
+      <section class="panel">
+        <h2>Where the stale pages are</h2>
+        <div class="legend" id="secLegend"></div>
+        <div class="chart" id="secChart"></div>
+        <details class="tbl"><summary>View as table</summary><div id="secTable"></div></details>
+      </section>
+      <section class="panel">
+        <h2>Trend across runs</h2>
+        <div class="legend" id="trendLegend"></div>
+        <div class="chart" id="trendChart"></div>
+        <details class="tbl"><summary>View as table</summary><div id="trendTable"></div></details>
+      </section>
+      <section class="panel wide">
+        <h2>Findings mix</h2>
+        <div id="mix"></div>
+      </section>
+    </div>
+
+    <section class="panel">
+      <details class="logwrap" id="logWrap" open>
+        <summary>Activity</summary>
+        <div class="log" id="log" role="log" aria-live="off" aria-label="Activity log" tabindex="0"></div>
+      </details>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Report</h2>
+        <span class="muted" id="reportSub"></span>
+        <div class="actions">
+          <button class="small" id="expCsv">Export CSV</button>
+          <button class="small" id="expJson">Export JSON</button>
+          <button class="small" id="expMd">Download digest (.md)</button>
+        </div>
+      </div>
+      <div class="maintabs" id="mainTabs" role="tablist" aria-label="Report views"></div>
+      <div role="tabpanel" id="reportPanel" tabindex="0">
+        <div class="tabs" id="tabs" role="group" aria-label="Filter"></div>
+        <div id="report"></div>
+      </div>
+    </section>
+  </div>
+  <div class="panel empty hidden" id="noRuns"></div>
+</main>
+<div class="tip" id="tip" role="tooltip"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+};
+const api = {
+  async get(u) { const r = await fetch(u); if (r.status === 401) return signedOut(); if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText); return r.json(); },
+  async post(u, b) {
+    const r = await fetch(u, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b || {}) });
+    if (r.status === 401) return signedOut();
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    return j;
+  },
+};
+
+// Read-only snapshot (export_static.py): answer the API from embedded data, no server.
+const STATIC = window.SWEEP_STATIC || null;
+if (STATIC) {
+  api.get = async u => {
+    if (u === "/api/projects") return { projects: [STATIC.project], profiles: STATIC.profiles, keys: {} };
+    if (u.startsWith("/api/projects/")) return STATIC.result;
+    if (u.startsWith("/api/state")) return { run: null };
+    throw new Error("Not available in a snapshot");
+  };
+  api.post = async () => { throw new Error("This is a read-only snapshot."); };
+}
+
+function signedOut() { location.href = "/login?next=" + encodeURIComponent(location.pathname + location.hash); return new Promise(() => {}); }
+function say(msg) { const a = $("announce"); a.textContent = ""; setTimeout(() => { a.textContent = msg; }, 50); }
+function showError(msg) { const e = $("formError"); e.textContent = msg; e.classList.toggle("hidden", !msg); }
+
+const STAGES = [
+  ["discover", "Discover", "robots + sitemap"], ["crawl", "Crawl", "fetch pages"],
+  ["links", "Links", "check targets"], ["signals", "Signals", "stale + outdated"],
+  ["triage", "AI triage", "dead or live?"], ["contradictions", "Contradictions", "compare pages"],
+  ["digest", "Digest", "write report"],
+];
+const SEV = ["high", "medium", "low"];
+let projects = [], profiles = {}, keys = {}, envKeys = [], models = {}, compatible = {};
+let pid = null, view = null, result = null, live = null;
+let since = 0, invCache = { run: null, data: [] }, logKey = null, savedHandled = null;
+let mainTab = ["stale", "contra", "all"].find(t => location.hash === "#" + t) || store.get("sweep.tab") || "stale", subFilter = "all", open = new Set();
+
+const project = () => projects.find(p => p.id === pid) || null;
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+// ---------- formatting ----------
+
+function fmtAge(days) {
+  if (days == null) return "unknown";
+  if (days < 60) return `${days} days`;
+  if (days < 730) return `${Math.round(days / 30)} months`;
+  return `${(days / 365).toFixed(1)} years`;
+}
+function fmtDur(s) { s = Math.round(s); if (s < 60) return `${s}s`; const m = Math.floor(s / 60); return m < 60 ? `${m}m ${s % 60}s` : `${Math.floor(m / 60)}h ${m % 60}m`; }
+function fmtWhen(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString([], { month: "short", day: "numeric" }) + ", " + d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+function fmtMonths(m) { return m < 12 ? `${m} mo` : `${+(m / 12).toFixed(1)} y`; }
+const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
+
+// ---------- projects & form ----------
+
+function renderProjectPicker() {
+  const sel = $("projectSel");
+  sel.innerHTML = (pid ? "" : `<option value="">New project…</option>`) +
+    projects.map(p => `<option value="${esc(p.id)}" ${p.id === pid ? "selected" : ""}>${esc(p.name)}</option>`).join("");
+  if (!projects.length && !pid) sel.innerHTML = `<option value="">No projects yet</option>`;
+}
+
+function fillForm(p) {
+  const f = $("form"), s = p ? p.settings : DEFAULTS;
+  f.name.value = p ? p.name : ""; f.site.value = p ? p.site : "";
+  for (const k of ["max_pages", "stale_months", "custom_min", "custom_max", "contra_groups"]) f[k].value = s[k];
+  f.speed.value = s.speed; f.provider.value = s.provider;
+  for (const k of ["custom_url", "custom_model"]) f[k].value = s[k] || "";
+  renderKeySelect(s.custom_key_env || "");
+  $("modelList").innerHTML = "";
+  $("testResult").textContent = "";
+  for (const k of ["link_check", "ai", "contradictions", "reuse_analysis"]) f[k].checked = !!s[k];
+  $("formTitle").textContent = p ? "Project" : "New project";
+  $("deleteBtn").classList.toggle("hidden", !p);
+  renderNote();
+}
+const DEFAULTS = { max_pages: 200, stale_months: 18, speed: "polite", custom_min: 2, custom_max: 5,
+                   link_check: true, ai: true, contradictions: true, reuse_analysis: true, contra_groups: 12, provider: "anthropic",
+                   custom_url: "", custom_model: "", custom_key_env: "" };
+
+function formData() {
+  const f = $("form");
+  return {
+    id: pid || undefined, name: f.name.value, site: f.site.value,
+    settings: {
+      max_pages: +f.max_pages.value, stale_months: +f.stale_months.value, speed: f.speed.value,
+      custom_min: +f.custom_min.value, custom_max: +f.custom_max.value, provider: f.provider.value,
+      link_check: f.link_check.checked, ai: f.ai.checked, contradictions: f.contradictions.checked,
+      reuse_analysis: f.reuse_analysis.checked,
+      custom_url: f.custom_url.value.trim(), custom_model: f.custom_model.value.trim(),
+      custom_key_env: f.custom_key_env.value,
+      contra_groups: +f.contra_groups.value,
+    },
+  };
+}
+
+function renderKeySelect(current) {
+  const opts = [`<option value="">None (local model, no key)</option>`, ...envKeys.map(k => `<option value="${esc(k)}">${esc(k)}</option>`)];
+  if (current && !envKeys.includes(current)) opts.push(`<option value="${esc(current)}">${esc(current)} (not in .env)</option>`);
+  $("keySel").innerHTML = opts.join("");
+  $("keySel").value = current;
+}
+
+function renderNote() {
+  const f = $("form"), n = $("note");
+  const custom = f.speed.value === "custom";
+  document.querySelectorAll(".custom").forEach(el => el.classList.toggle("hidden", !custom));
+  const p = custom ? { min: +f.custom_min.value || 2, max: +f.custom_max.value || 5, pause_chance: 0, pause: [0, 0] } : profiles[f.speed.value];
+  const msgs = [];
+  if (p) {
+    const avg = (p.min + Math.max(p.min, p.max)) / 2 + p.pause_chance * (p.pause[0] + p.pause[1]) / 2;
+    const est = (+f.max_pages.value || 0) * avg;
+    msgs.push(`One request every ${p.min}–${Math.max(p.min, p.max)}s${p.pause_chance ? ", with occasional longer pauses" : ""}. ` +
+              `About ${fmtDur(est)} for ${f.max_pages.value} pages, plus link checks.`);
+  }
+  const prov = f.provider.value, preset = compatible[prov], isCustom = prov === "custom";
+  const show = (sel, on) => document.querySelectorAll(sel).forEach(el => el.classList.toggle("hidden", !on));
+  show(".custom-only", isCustom); show(".preset-only", !!preset); show(".compat-ai", isCustom || !!preset);
+  if (preset) {
+    $("keyStatus").textContent = !preset.key_env ? `${preset.label} runs on this computer and needs no key. Make sure it's running before you sweep.`
+      : envKeys.includes(preset.key_env) ? `Uses ${preset.key_env} from .env (found).` : `Add ${preset.key_env}=your-key to .env, then restart the dashboard.`;
+  }
+  let needKey = "";
+  if (f.ai.checked || f.contradictions.checked) {
+    const keyVar = f.custom_key_env.value, model = f.custom_model.value.trim();
+    if ((isCustom || preset) && !model) needKey = "Choose a model (Load models lists them), or the AI steps will be skipped.";
+    else if (preset && preset.key_env && !envKeys.includes(preset.key_env)) needKey = `No ${preset.key_env} in .env, so the AI steps will be skipped.`;
+    else if (isCustom && !f.custom_url.value.trim()) needKey = "Enter the endpoint URL, or the AI steps will be skipped.";
+    else if (isCustom && keyVar && !envKeys.includes(keyVar)) needKey = `No ${keyVar} in .env, so the AI steps will be skipped.`;
+    else if (!isCustom && !preset && !keys[prov]) needKey = `No ${prov === "xai" ? "XAI_API_KEY" : "ANTHROPIC_API_KEY"} in .env, so the AI steps will be skipped.`;
+  }
+  if (prov !== "custom" && models[prov]) msgs.push(`AI model: ${models[prov]}.`);
+  if (needKey) msgs.push(needKey);
+  n.className = "note c3 full-sm" + (needKey ? " warn" : "");
+  n.textContent = msgs.join(" ");
+}
+
+async function loadProjects() {
+  const d = await api.get("/api/projects");
+  projects = d.projects; profiles = d.profiles; keys = d.keys; envKeys = d.env_keys || []; models = d.models || {};
+  compatible = d.compatible || {};
+  const ps = $("providerSel"), cur = ps.value;
+  ps.innerHTML = `<optgroup label="Built in"><option value="anthropic">Anthropic</option><option value="xai">xAI (Grok)</option></optgroup>` +
+    `<optgroup label="OpenAI-compatible">${Object.entries(compatible).map(([k, c]) => `<option value="${k}">${esc(c.label)}</option>`).join("")}` +
+    `<option value="custom">Other (custom endpoint)</option></optgroup>`;
+  ps.value = cur || "anthropic";
+  $("speedSel").innerHTML = Object.entries(profiles).map(([k, p]) =>
+    `<option value="${k}">${esc(p.label)} (${p.min}–${p.max}s)</option>`).join("") + `<option value="custom">Custom…</option>`;
+}
+
+async function selectProject(id, runId) {
+  pid = id || null;
+  if (pid) store.set("sweep.project", pid);
+  open.clear(); subFilter = "all";
+  fillForm(project());
+  renderProjectPicker();
+  const p = project();
+  document.title = (p ? p.name + " · " : "") + "Nightly Sweep";
+  if (live && p && live.project_id === p.id && !live.saved) { view = "live"; result = liveResult(); logKey = null; }
+  else if (p && (runId || p.runs.length)) await loadRun(runId || p.runs[0].id);
+  else { view = null; result = null; }
+  renderAll();
+}
+
+async function loadRun(rid) {
+  try { result = await api.get(`/api/projects/${pid}/runs/${rid}`); view = rid; }
+  catch (e) { result = null; view = null; }
+  logKey = null; open.clear();
+}
+
+// ---------- live polling ----------
+
+function liveResult() {
+  if (!live) return null;
+  if (invCache.run !== live.run_id) invCache = { run: live.run_id, data: [] };
+  if (live.inventory) invCache.data = live.inventory;
+  return { ...live, inventory: invCache.data };
+}
+
+async function poll() {
+  try {
+    const needInv = live && invCache.run === live.run_id ? (invCache.data.length !== live.inv_len ? 1 : 0) : 1;
+    const d = await api.get(`/api/state?since=${since}&inv=${needInv}`);
+    const prevRun = live && live.run_id;
+    live = d.run;
+    if (live && live.run_id !== prevRun) since = 0;
+    if (live && live.log.length) since = live.log[live.log.length - 1].t;
+    if (live && live.inventory) invCache = { run: live.run_id, data: live.inventory };
+    renderBanner();
+    announceProgress();
+    if (live && view === "live" && live.project_id === pid) {
+      if (live.saved && savedHandled !== live.run_id) {
+        savedHandled = live.run_id;
+        await loadProjects();
+        await selectProject(pid, live.run_id);
+      } else if (!live.saved) {
+        result = liveResult();
+        renderAll(live.log);
+      }
+    } else if (live && live.saved && savedHandled !== live.run_id) {
+      savedHandled = live.run_id;
+      await loadProjects();
+      renderProjectPicker(); renderRunPicker();
+    }
+    renderControls();
+  } catch (e) { /* server restarting; try again */ }
+  setTimeout(poll, live && !live.saved ? 800 : 2500);
+}
+
+let lastSaid = "";
+function announceProgress() {
+  if (!live || !live.stages) return;
+  const label = Object.fromEntries(STAGES.map(s => [s[0], s[1]]));
+  const msg = live.saved ? `Sweep ${live.status === "done" ? "finished" : live.status}. ${live.counts.pages} pages crawled, ${live.counts.stale} stale, ${live.counts.contradictions} contradictions.`
+    : `${label[live.stage] || live.stage} in progress.`;
+  if (msg !== lastSaid) { lastSaid = msg; if (live.project_id === pid) say(msg); }
+}
+
+function renderBanner() {
+  const b = $("banner");
+  if (live && !live.saved && live.project_id !== pid) {
+    b.classList.remove("hidden");
+    b.innerHTML = `A sweep is running on <b>${esc(live.project_name)}</b> (${live.counts.pages} pages so far). <button type="button" class="linkbtn" id="goLive">View it</button>`;
+    $("goLive").onclick = () => selectProject(live.project_id);
+  } else b.classList.add("hidden");
+}
+
+function renderControls() {
+  const running = !!(live && !live.saved);
+  $("start").disabled = running;
+  $("stop").classList.toggle("hidden", !(running && live.project_id === pid));
+  const st = result ? result.status : "idle";
+  $("status").className = "pill " + (result ? st : "");
+  $("status").textContent = result ? (view === "live" ? st : st === "done" ? "saved run" : st) : "idle";
+  $("elapsed").textContent = result ? `${fmtWhen(result.started)} · ${fmtDur(result.elapsed)}` : "";
+}
+
+// ---------- rendering ----------
+
+function renderAll(newLog) {
+  renderControls();
+  const has = !!result;
+  $("results").classList.toggle("hidden", !has);
+  const nr = $("noRuns");
+  nr.classList.toggle("hidden", has);
+  nr.innerHTML = !pid ? "Fill in a name and site URL above, then <b>Save</b> or <b>Start sweep</b>."
+    : "No runs yet for this project. Press <b>Start sweep</b> to run the first one.";
+  if (!has) return;
+  renderRunPicker(); renderStages(); renderTiles(); renderCharts(); renderMix();
+  renderLog(newLog); renderReport();
+}
+
+function renderRunPicker() {
+  const p = project(); if (!p) return;
+  const opts = [];
+  if (live && !live.saved && live.project_id === pid) opts.push(`<option value="live" ${view === "live" ? "selected" : ""}>● Live — running now</option>`);
+  for (const r of p.runs.filter(r => !STATIC || r.id === view)) opts.push(`<option value="${esc(r.id)}" ${view === r.id ? "selected" : ""}>${fmtWhen(r.started)} · ${r.status} · ${r.counts.pages} pages</option>`);
+  $("runSel").innerHTML = opts.join("");
+  const o = result && result.opts, model = o ? result.model || (o.provider === "custom" || compatible[o.provider] ? o.custom_model : models[o.provider]) : "";
+  $("runInfo").textContent = result ? `${o.site} · ${result.pace || ""}${(o.ai || o.contradictions) && model ? ` · AI: ${model}` : ""}` : "";
+}
+
+function renderStages() {
+  const r = result, c = r.counts;
+  $("stages").innerHTML = STAGES.map(([id, name, hint]) => {
+    const st = r.stages[id] || "pending";
+    let p = 0, txt = { pending: hint, active: "working…", done: "done", skipped: "skipped", failed: "failed", stopped: "stopped" }[st] || st;
+    if (st === "active") {
+      if (id === "crawl") { p = c.fetched / r.opts.max_pages; txt = `${c.pages} crawled · ${c.dead_pages} dead`; }
+      if (id === "links" && c.links_total) { p = c.links_done / c.links_total; txt = `${c.links_done} / ${c.links_total}`; }
+      if (id === "triage" && c.batches_total) { p = c.batches_done / c.batches_total; txt = `batch ${Math.min(c.batches_done + 1, c.batches_total)} of ${c.batches_total}`; }
+      if (id === "contradictions" && c.groups_total) { p = c.groups_done / c.groups_total; txt = `group ${Math.min(c.groups_done + 1, c.groups_total)} of ${c.groups_total}`; }
+    }
+    return `<div class="stage ${st}"><div class="name">${name}</div><div class="state">${esc(txt)}</div><div class="bar" style="width:${Math.min(100, p * 100)}%"></div></div>`;
+  }).join("");
+  $("paceLine").textContent = `Pace: ${r.pace || "—"} · ${c.pauses} reading pause${c.pauses === 1 ? "" : "s"} · ` +
+    `${c.backoffs ? `slowed down ${c.backoffs}× when the site pushed back` : "the site never asked us to slow down"}` +
+    (r.error ? ` · Error: ${r.error}` : "");
+}
+
+function renderTiles() {
+  const c = result.counts;
+  const t = [
+    ["Pages crawled", c.pages, "--s-fresh", c.failed ? `${c.failed} failed to load` : ""],
+    ["Stale pages", c.stale, "--s-stale", `${pct(c.stale, c.pages)}% of crawled`],
+    ["Outdated wording", c.outdated, "--s-stale", "past dates read as upcoming"],
+    ["Contradictions", c.contradictions, "--s-contra", c.groups_total ? `${c.groups_total} groups compared` : !result.opts.contradictions ? "check was off" : result.status === "running" ? "runs after triage" : "not run"],
+    ["Dead pages", c.dead_pages, "--s-dead", "404 / 403"],
+    ["Broken links", c.broken, "--s-broken", `${c.links_done} links checked`],
+    ["Expired events", c.expired, "--st-warning", ""],
+    ["AI: dead", c.dead, "--st-critical", [c.unclear || c.live ? `${c.unclear} unclear · ${c.live} live` : "", c.reused ? `${c.reused} reused, page unchanged` : ""].filter(Boolean).join(" · ")],
+  ];
+  $("tiles").innerHTML = t.map(([l, n, col, d]) =>
+    `<div class="tile" style="--tc:var(${col})"><div class="n">${n}</div><div class="l">${l}</div>${d ? `<div class="d">${esc(d)}</div>` : ""}</div>`).join("");
+}
+
+// ---------- charts (plain SVG) ----------
+
+const emptyChart = () => `<div class="empty-chart">${result.stages.signals === "done" || result.status !== "running"
+  ? "No pages were crawled in this run." : "Fills in when the crawl finishes."}</div>`;
+
+const tip = $("tip");
+function showTip(e, html) {
+  tip.innerHTML = html; tip.style.display = "block";
+  const x = Math.min(e.clientX + 14, window.innerWidth - tip.offsetWidth - 8);
+  const y = e.clientY + 14 + tip.offsetHeight > window.innerHeight ? e.clientY - tip.offsetHeight - 10 : e.clientY + 14;
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+function hideTip() { tip.style.display = "none"; }
+document.addEventListener("keydown", e => { if (e.key === "Escape") hideTip(); });
+function bindTips(root) {
+  root.querySelectorAll("[data-tip]").forEach(el => {
+    el.addEventListener("mousemove", e => showTip(e, el.dataset.tip));
+    el.addEventListener("mouseleave", hideTip);
+  });
+}
+// Axis top with whole-number ticks: 4 steps of 1, 2, 5, 10, 20, 50…
+function niceMax(v) {
+  const raw = Math.max(1, v) / 4, p = 10 ** Math.floor(Math.log10(raw)), m = raw / p;
+  const step = Math.max(1, (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p);
+  return step * 4;
+}
+function topBar(x, y, w, h, r) { r = Math.min(r, w / 2, h); return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`; }
+function legend(items) { return items.map(([label, v]) => `<span><i style="background:var(${v})"></i>${esc(label)}</span>`).join(""); }
+function table(head, rows, caption) {
+  return `<div class="mini-wrap" tabindex="0" role="region" aria-label="${esc(caption || "Data table")}"><table><caption class="sr-only">${esc(caption || "")}</caption><thead><tr>${head.map(h => `<th scope="col">${esc(h)}</th>`).join("")}</tr></thead><tbody>${
+    rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+}
+const swatch = v => `<i style="background:var(${v})"></i>`;
+
+let chartKey = "";
+function renderCharts(force) {
+  const r = result;
+  const key = JSON.stringify([r.run_id, r.inventory.length, r.counts.stale, r.counts.contradictions, (project() || {}).runs?.length, $("ageChart").clientWidth]);
+  if (key === chartKey && !force) return;
+  chartKey = key;
+  ageChart(); sectionChart(); trendChart();
+}
+
+function ageBuckets() {
+  const sm = result.opts.stale_months;
+  const edges = [...new Set([3, 6, 12, 24, 36, 60, sm])].filter(e => e > 0).sort((a, b) => a - b);
+  const b = [];
+  let lo = 0;
+  for (const e of edges) { b.push({ lo, hi: e }); lo = e; }
+  b.push({ lo, hi: Infinity });
+  for (const x of b) {
+    x.label = x.lo === 0 ? `< ${fmtMonths(x.hi)}` : x.hi === Infinity ? `${fmtMonths(x.lo)}+` : `${fmtMonths(x.lo)}–${fmtMonths(x.hi)}`;
+    x.stale = x.lo >= sm; x.n = 0;
+  }
+  const unknown = { label: "No date", unknown: true, n: 0 };
+  for (const p of result.inventory) {
+    if (p.age_days == null) { unknown.n++; continue; }
+    const m = p.age_days / 30;
+    (b.find(x => m >= x.lo && m < x.hi) || b[b.length - 1]).n++;
+  }
+  return unknown.n ? [...b, unknown] : b;
+}
+
+function ageChart() {
+  const el = $("ageChart"), inv = result.inventory, sm = result.opts.stale_months;
+  $("ageLegend").innerHTML = legend([["Edited recently", "--s-fresh"], [`Stale (${sm}+ months)`, "--s-stale"], ["No date published", "--s-unknown"]]);
+  if (!inv.length) { el.innerHTML = emptyChart(); $("ageHead").innerHTML = ""; $("ageTable").innerHTML = ""; return; }
+  const dated = inv.filter(p => p.age_days != null).map(p => p.age_days).sort((a, b) => a - b);
+  const stale = inv.filter(p => p.stale).length;
+  const median = dated.length ? dated[Math.floor(dated.length / 2)] : null;
+  $("ageHead").innerHTML = dated.length
+    ? `<b>${stale}</b> of ${dated.length} dated pages (${pct(stale, dated.length)}%) not edited in ${sm}+ months · median age ${fmtAge(median)}` +
+      (inv.length - dated.length ? ` · <span class="muted">${inv.length - dated.length} pages publish no date</span>` : "")
+    : `None of the ${inv.length} pages publish a last-modified date, so age can't be measured.`;
+
+  const B = ageBuckets(), W = el.clientWidth || 600, H = 210, m = { l: 34, r: 8, t: 14, b: 26 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b, max = niceMax(Math.max(...B.map(b => b.n), 1));
+  const bw = iw / B.length, pad = Math.min(14, bw * 0.18);
+  const y = v => m.t + ih - v / max * ih;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc("Pages by time since last edit: " + B.map(b => `${b.label}, ${b.n}`).join("; "))}">`;
+  for (let i = 0; i <= 4; i++) {
+    const v = max * i / 4, yy = y(v);
+    s += `<line x1="${m.l}" x2="${W - m.r}" y1="${yy}" y2="${yy}" stroke="var(--grid)" stroke-width="1"/>`;
+    s += `<text x="${m.l - 6}" y="${yy + 4}" text-anchor="end">${Math.round(v)}</text>`;
+  }
+  B.forEach((b, i) => {
+    const x = m.l + i * bw + pad / 2, w = bw - pad, h = ih - (y(b.n) - m.t);
+    const col = b.unknown ? "--s-unknown" : b.stale ? "--s-stale" : "--s-fresh";
+    if (b.n) s += `<path d="${topBar(x, y(b.n), w, h, 4)}" fill="var(${col})"/>`;
+    s += `<text x="${x + w / 2}" y="${H - 8}" text-anchor="middle">${esc(b.label)}</text>`;
+    const state = b.unknown ? "no date published" : b.stale ? "stale" : "edited recently";
+    s += `<rect x="${m.l + i * bw}" y="${m.t}" width="${bw}" height="${ih}" fill="transparent" data-tip="${esc(`${swatch(col)}<b>${b.label}</b><br>${b.n} page${b.n === 1 ? "" : "s"} · ${state}`)}"/>`;
+  });
+  const si = B.findIndex(b => b.stale);
+  if (si > 0) {
+    const x = m.l + si * bw;
+    s += `<line x1="${x}" x2="${x}" y1="${m.t - 4}" y2="${m.t + ih}" stroke="var(--muted)" stroke-dasharray="3 3"/>`;
+    s += `<text x="${x + 5}" y="${m.t + 6}" class="lbl">stale →</text>`;
+  }
+  s += `<line x1="${m.l}" x2="${W - m.r}" y1="${m.t + ih}" y2="${m.t + ih}" stroke="var(--line)"/></svg>`;
+  el.innerHTML = s; bindTips(el);
+  $("ageTable").innerHTML = table(["Last edited", "Pages", "Status"], B.map(b => [b.label, b.n, b.unknown ? "no date" : b.stale ? "stale" : "recent"]), "Pages by time since last edit");
+}
+
+function sectionChart() {
+  const el = $("secChart");
+  $("secLegend").innerHTML = legend([["Recent", "--s-fresh"], ["Stale", "--s-stale"], ["No date", "--s-unknown"]]);
+  const by = {};
+  for (const p of result.inventory) {
+    const s = by[p.section] ||= { name: p.section, fresh: 0, stale: 0, unknown: 0, total: 0 };
+    s.total++; p.age_days == null ? s.unknown++ : p.stale ? s.stale++ : s.fresh++;
+  }
+  const rows = Object.values(by).sort((a, b) => b.stale - a.stale || b.total - a.total).slice(0, 10);
+  if (!rows.length) { el.innerHTML = emptyChart(); $("secTable").innerHTML = ""; return; }
+  const W = el.clientWidth || 400, lw = Math.min(120, W * 0.3), rw = 92, rh = 26, H = rows.length * rh + 4;
+  const iw = W - lw - rw, max = Math.max(...rows.map(r => r.total));
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc("Stale pages by site section: " + rows.map(r => `${r.name}, ${r.stale} of ${r.total} stale`).join("; "))}"><defs>`;
+  rows.forEach((r, i) => { s += `<clipPath id="sc${i}"><rect x="${lw}" y="${i * rh + 6}" width="${Math.max(2, r.total / max * iw)}" height="14" rx="4"/></clipPath>`; });
+  s += `</defs>`;
+  rows.forEach((r, i) => {
+    const yy = i * rh + 6;
+    s += `<text x="${lw - 8}" y="${yy + 11}" text-anchor="end" class="lbl">${esc(r.name.length > 18 ? r.name.slice(0, 17) + "…" : r.name)}</text>`;
+    let x = lw;
+    s += `<g clip-path="url(#sc${i})">`;
+    for (const [k, col, label] of [["stale", "--s-stale", "stale"], ["fresh", "--s-fresh", "recent"], ["unknown", "--s-unknown", "no date"]]) {
+      if (!r[k]) continue;
+      const w = r[k] / max * iw;
+      s += `<rect x="${x}" y="${yy}" width="${Math.max(0, w - 2)}" height="14" fill="var(${col})" data-tip="${esc(`${swatch(col)}<b>${r.name}</b><br>${r[k]} ${label} of ${r.total} pages`)}"/>`;
+      x += w;
+    }
+    s += `</g><text x="${lw + r.total / max * iw + 6}" y="${yy + 11}">${r.stale ? `${pct(r.stale, r.total)}% stale` : `${r.total} pages`}</text>`;
+  });
+  el.innerHTML = s + `</svg>`; bindTips(el);
+  $("secTable").innerHTML = table(["Section", "Pages", "Stale", "Recent", "No date"], rows.map(r => [r.name, r.total, r.stale, r.fresh, r.unknown]), "Stale pages by site section");
+}
+
+const TREND = [["stale", "Stale pages", "--s-stale"], ["broken", "Broken links", "--s-broken"],
+               ["dead_pages", "Dead pages", "--s-dead"], ["contradictions", "Contradictions", "--s-contra"]];
+function trendChart() {
+  const el = $("trendChart"), p = project();
+  $("trendLegend").innerHTML = legend(TREND.map(t => [t[1], t[2]]));
+  const runs = (p ? p.runs : []).filter(r => r.status === "done").slice(0, 12).reverse();
+  $("trendTable").innerHTML = runs.length ? table(["Run", ...TREND.map(t => t[1])], runs.map(r => [fmtWhen(r.started), ...TREND.map(t => r.counts[t[0]] ?? 0)]), "Issue counts by run") : "";
+  if (runs.length < 2) { el.innerHTML = `<div class="empty-chart">Trends appear after the second completed run.</div>`; return; }
+  const W = el.clientWidth || 400, H = 220, m = { l: 34, r: 104, t: 12, b: 26 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const max = niceMax(Math.max(1, ...runs.flatMap(r => TREND.map(t => r.counts[t[0]] || 0))));
+  const x = i => m.l + (runs.length === 1 ? iw / 2 : i / (runs.length - 1) * iw), y = v => m.t + ih - v / max * ih;
+  const last = runs[runs.length - 1], first = runs[0];
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(`Issue counts across ${runs.length} runs. ` + TREND.map(([k, l]) => `${l}: ${first.counts[k] || 0} to ${last.counts[k] || 0}`).join("; "))}">`;
+  for (let i = 0; i <= 4; i++) {
+    const v = max * i / 4;
+    s += `<line x1="${m.l}" x2="${m.l + iw}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${Math.round(v)}</text>`;
+  }
+  const step = Math.ceil(runs.length / Math.max(1, Math.floor(iw / 70)));
+  runs.forEach((r, i) => { if (i % step === 0 || i === runs.length - 1) s += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle">${new Date(r.started).toLocaleDateString([], { month: "short", day: "numeric" })}</text>`; });
+  s += `<line class="xh" x1="0" x2="0" y1="${m.t}" y2="${m.t + ih}" stroke="var(--muted)" stroke-width="1" visibility="hidden"/>`;
+  const ends = [];
+  for (const [k, label, col] of TREND) {
+    const pts = runs.map((r, i) => [x(i), y(r.counts[k] || 0)]);
+    s += `<polyline points="${pts.map(p => p.join(",")).join(" ")}" fill="none" stroke="var(${col})" stroke-width="2" stroke-linejoin="round"/>`;
+    for (const [px, py] of pts) s += `<circle cx="${px}" cy="${py}" r="4" fill="var(${col})" stroke="var(--panel)" stroke-width="2"/>`;
+    ends.push({ y: pts[pts.length - 1][1], text: `${label} ${runs[runs.length - 1].counts[k] || 0}` });
+  }
+  ends.sort((a, b) => a.y - b.y);
+  for (let i = 1; i < ends.length; i++) ends[i].y = Math.max(ends[i].y, ends[i - 1].y + 13);
+  for (const e of ends) s += `<text x="${m.l + iw + 8}" y="${e.y + 4}" class="lbl">${esc(e.text)}</text>`;
+  s += `<rect class="hit" x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent"/></svg>`;
+  el.innerHTML = s;
+  const svg = el.querySelector("svg"), xh = svg.querySelector(".xh");
+  svg.querySelector(".hit").addEventListener("mousemove", e => {
+    const box = svg.getBoundingClientRect(), sx = (e.clientX - box.left) * W / box.width;
+    const i = Math.max(0, Math.min(runs.length - 1, Math.round((sx - m.l) / iw * (runs.length - 1))));
+    xh.setAttribute("x1", x(i)); xh.setAttribute("x2", x(i)); xh.setAttribute("visibility", "visible");
+    showTip(e, `<b>${fmtWhen(runs[i].started)}</b><br>` + TREND.map(([k, l, c]) => `${swatch(c)}${l}: ${runs[i].counts[k] || 0}`).join("<br>"));
+  });
+  svg.querySelector(".hit").addEventListener("mouseleave", () => { xh.setAttribute("visibility", "hidden"); hideTip(); });
+}
+
+function mixBar(parts) {
+  const total = parts.reduce((a, p) => a + p[1], 0);
+  if (!total) return `<div class="mixbar" aria-hidden="true"></div>`;
+  return `<div class="mixbar" aria-hidden="true">${parts.filter(p => p[1]).map(([l, n, col]) =>
+    `<span style="width:${n / total * 100}%;background:var(${col})" data-tip="${esc(`${swatch(col)}${l}: ${n}`)}"></span>`).join("")}</div>`;
+}
+function renderMix() {
+  const c = result.counts, o = result.opts;
+  const ai = [["Dead", c.dead, "--st-critical"], ["Unclear", c.unclear, "--st-warning"], ["Still live", c.live, "--st-good"]];
+  const sev = SEV.map((s, i) => [s[0].toUpperCase() + s.slice(1), result.contradictions.filter(x => x.severity === s).length, ["--st-critical", "--st-serious", "--st-warning"][i]]);
+  const block = (title, parts, off) => `<div style="margin-bottom:12px"><div class="muted" style="font-size:12px">${title}</div>${
+    off ? `<div class="note">${off}</div>` : mixBar(parts) + `<div class="legend">${parts.map(([l, n, col]) => `<span>${swatch(col)}${l} <b>${n}</b></span>`).join("")}</div>`}</div>`;
+  $("mix").innerHTML =
+    block("AI verdicts on flagged pages" + (c.reused ? ` · ${c.reused} reused because the page hadn't changed` : ""), ai, !o.ai ? "AI triage was off for this run." : (c.dead + c.unclear + c.live) ? "" : result.stages.triage === "skipped" ? "AI triage was skipped (no API key or nothing flagged)." : "") +
+    block("Contradictions by severity", sev, !o.contradictions ? "The contradiction check was off for this run." : result.stages.contradictions === "skipped" ? "The contradiction check was skipped (no API key)." : !result.contradictions.length && result.stages.contradictions === "done" ? `None found across ${c.groups_total} groups of related pages.` : "");
+  bindTips($("mix"));
+}
+
+function renderLog(newEntries) {
+  const box = $("log");
+  const key = view + ":" + result.run_id;
+  if (logKey !== key) {
+    logKey = key; box.innerHTML = "";
+    appendLog(result.log); box.scrollTop = box.scrollHeight;
+    $("logWrap").open = view === "live";
+    return;
+  }
+  if (newEntries && newEntries.length) appendLog(newEntries);
+}
+function appendLog(entries) {
+  const box = $("log"), stick = box.scrollTop + box.clientHeight >= box.scrollHeight - 20;
+  for (const e of entries) {
+    const d = document.createElement("div");
+    d.innerHTML = `<span class="t">${new Date(e.t * 1000).toLocaleTimeString([], { hour12: false })}</span><span class="${e.kind}">${esc(e.msg)}</span>`;
+    box.appendChild(d);
+  }
+  while (box.children.length > 500) box.firstChild.remove();
+  if (stick) box.scrollTop = box.scrollHeight;
+}
+
+// ---------- report ----------
+
+function verdictOf(url) {
+  const v = result.verdicts[url];
+  if (v) return v.verdict || "unclear";
+  if (!result.opts.ai) return "none";
+  return result.stages.triage === "active" ? "thinking" : "pending";
+}
+function verdictTag(v, status, url) {
+  const label = { http: `dead · ${status}`, thinking: "analyzing…", pending: "queued", none: "—" }[v] ?? v;
+  const r = url && result.verdicts[url] && result.verdicts[url].reused_from;
+  return `<span class="tag ${v === "http" ? "dead" : v}">${esc(label)}</span>` +
+    (r ? `<div class="muted" style="font-size:11px;margin-top:3px" title="The page hasn't changed since it was analysed on ${esc(fmtWhen(r))}">↺ reused from ${esc(new Date(r).toLocaleDateString([], { month: "short", day: "numeric" }))}</div>` : "");
+}
+function markQuote(m) {
+  const q = esc(m.quote), d = esc(m.match);
+  return q.replace(d, `<mark>${d}</mark>`);
+}
+
+function staleItems() {
+  return result.findings
+    .filter(f => f.stale || f.outdated_mentions.length || f.expired_events.length)
+    .map(f => ({ ...f, verdict: verdictOf(f.url) }))
+    .sort((a, b) => (b.age_days ?? -1) - (a.age_days ?? -1));
+}
+
+function allItems() {
+  const items = result.dead_pages.map(d => ({
+    kind: "http", url: d.url, title: "", status: d.status, verdict: "http",
+    reason: `Returns HTTP ${d.status}. Linked from ${d.linked_from.length} page${d.linked_from.length === 1 ? "" : "s"}.`,
+    evidence: "", last_modified: null, stale: false, broken_links: [], expired_events: [], outdated_mentions: [],
+    forms: 0, linked_from: d.linked_from,
+  }));
+  for (const f of result.findings) {
+    const v = result.verdicts[f.url];
+    items.push({ kind: "page", ...f, status: 200, verdict: verdictOf(f.url), reason: v ? v.reason || "" : "", evidence: v ? v.evidence || "" : "", linked_from: [] });
+  }
+  const order = { http: 0, dead: 1, unclear: 2, thinking: 3, pending: 4, none: 4, live: 5 };
+  return items.sort((a, b) => order[a.verdict] - order[b.verdict]);
+}
+
+const FILTERS = {
+  stale: [
+    ["all", "All", () => true], ["stale", "Not edited recently", i => i.stale],
+    ["outdated", "Outdated wording", i => i.outdated_mentions.length > 0],
+    ["expired", "Expired events", i => i.expired_events.length > 0], ["dead", "AI: dead", i => i.verdict === "dead"],
+  ],
+  contra: [["all", "All", () => true], ...SEV.map(s => [s, s[0].toUpperCase() + s.slice(1), c => c.severity === s])],
+  all: [
+    ["all", "All", () => true], ["dead", "Dead", i => i.verdict === "dead" || i.verdict === "http"],
+    ["http", "404 / 403", i => i.verdict === "http"], ["unclear", "Unclear", i => i.verdict === "unclear"],
+    ["live", "Live", i => i.verdict === "live"], ["pending", "Not reviewed", i => ["pending", "thinking", "none"].includes(i.verdict)],
+    ["broken", "Broken links", i => i.broken_links.length > 0], ["expired", "Expired events", i => i.expired_events.length > 0],
+  ],
+};
+const SOURCES = { stale: staleItems, contra: () => result.contradictions, all: allItems };
+
+function renderReport() {
+  const c = result.counts;
+  const tabs = [["stale", `Stale & outdated (${staleItems().length})`], ["contra", `Contradictions (${c.contradictions})`], ["all", "All issues"]];
+  $("mainTabs").innerHTML = tabs.map(([k, l]) => `<button type="button" role="tab" id="tab-${k}" aria-controls="reportPanel" aria-selected="${mainTab === k}" tabindex="${mainTab === k ? 0 : -1}" class="${mainTab === k ? "on" : ""}" data-t="${k}">${l}</button>`).join("");
+  $("reportPanel").setAttribute("aria-labelledby", "tab-" + mainTab);
+  const items = SOURCES[mainTab]();
+  const filters = FILTERS[mainTab];
+  if (!filters.find(f => f[0] === subFilter)) subFilter = "all";
+  $("tabs").innerHTML = items.length ? filters.map(([k, l, fn]) =>
+    `<button type="button" class="small ${subFilter === k ? "on" : ""}" aria-pressed="${subFilter === k}" data-f="${k}">${l} (${items.filter(fn).length})</button>`).join("") : "";
+  const rows = items.filter(filters.find(f => f[0] === subFilter)[2]);
+  $("reportSub").textContent = `${c.pages} pages crawled · ${c.flagged} flagged`;
+  $("expCsv").disabled = !items.length;
+  $("expMd").disabled = !(result.digest_text || result.digest) || view === "live";
+  $("report").innerHTML = mainTab === "stale" ? staleTable(items, rows) : mainTab === "contra" ? contraCards(items, rows) : allTable(items, rows);
+}
+
+function staleTable(items, rows) {
+  if (!items.length) return `<div class="empty">${result.stages.signals === "done" ? "No stale or outdated pages. Everything that publishes a date has been edited recently." : "Stale pages show up here after the crawl."}</div>`;
+  if (!rows.length) return `<div class="empty">No pages in this view.</div>`;
+  return `<div class="table-wrap" tabindex="0" role="region" aria-label="Stale and outdated pages"><table><caption class="sr-only">Stale and outdated pages, oldest first</caption><thead><tr><th scope="col">Page</th><th scope="col" style="width:150px">Last edited</th><th scope="col" style="width:170px">Signals</th>
+    <th scope="col" style="width:100px">AI verdict</th><th scope="col" style="width:40%">Evidence</th></tr></thead><tbody>${rows.map(f => {
+    const tags = [];
+    if (f.stale) tags.push(`<span class="tag stale">stale</span>`);
+    if (f.outdated_mentions.length) tags.push(`<span class="tag outdated">${f.outdated_mentions.length} outdated date${f.outdated_mentions.length > 1 ? "s" : ""}</span>`);
+    if (f.expired_events.length) tags.push(`<span class="tag expired">expired event</span>`);
+    if (f.broken_links.length) tags.push(`<span class="tag broken">${f.broken_links.length} broken link${f.broken_links.length > 1 ? "s" : ""}</span>`);
+    const v = result.verdicts[f.url];
+    const ev = [
+      ...f.outdated_mentions.map(m => `<div class="quote">${markQuote(m)}</div>`),
+      ...f.expired_events.map(e => `<div class="quote">Event “${esc(e.name || "untitled")}” ended ${esc(String(e.endDate).slice(0, 10))}</div>`),
+      v ? `<div style="margin-top:6px">${esc(v.reason || "")}${v.evidence ? `<div class="quote">“${esc(v.evidence)}”</div>` : ""}</div>` : "",
+    ].join("");
+    return `<tr><td><div class="title">${esc(f.title || f.url)}</div><div class="url"><a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.url)}</a></div><div class="muted" style="font-size:12px">${esc(f.section)}</div></td>
+      <td class="nowrap">${esc((f.last_modified || "—").slice(0, 10))}<div class="muted" style="font-size:12px">${f.age_days != null ? fmtAge(f.age_days) + " ago" : "no date"}</div></td>
+      <td><div class="tags">${tags.join("")}</div></td><td>${verdictTag(f.verdict, null, f.url)}</td><td>${ev || '<span class="muted">Old, but the text shows no sign of being out of date.</span>'}</td></tr>`;
+  }).join("")}</tbody></table></div>`;
+}
+
+function contraCards(items, rows) {
+  const c = result.counts, st = result.stages.contradictions;
+  const head = c.groups_total ? `<div class="note" style="margin-bottom:10px">Compared ${c.groups_total} groups of related pages. Every quote below was found word for word on its page${c.contra_dropped ? `; ${c.contra_dropped} claim${c.contra_dropped > 1 ? "s" : ""} the model made but couldn't back with a quote ${c.contra_dropped > 1 ? "were" : "was"} discarded` : ""}.</div>` : "";
+  if (!items.length) {
+    const msg = !result.opts.contradictions ? "The contradiction check was off for this run. Turn on “Find contradictions” and run again."
+      : st === "skipped" ? "The contradiction check was skipped because no API key was set."
+      : st === "done" ? `No contradictions found across ${c.groups_total} groups of related pages.`
+      : "Contradictions show up here once related pages have been compared.";
+    return head + `<div class="empty">${msg}</div>`;
+  }
+  if (!rows.length) return head + `<div class="empty">No contradictions in this view.</div>`;
+  const side = (url, title, quote) => `<div class="side"><div class="q">“${esc(quote)}”</div><div class="url"><a href="${esc(url)}" target="_blank" rel="noopener">${esc(title || url)}</a></div></div>`;
+  return head + [...rows].sort((a, b) => SEV.indexOf(a.severity) - SEV.indexOf(b.severity)).map(x => `<div class="contra">
+    <div class="top"><span class="tag ${x.severity}">${x.severity}</span><b>${esc(x.topic)}</b>${x.page_a === x.page_b ? `<span class="tag info">same page</span>` : ""}<span class="muted" style="font-size:12px;margin-left:auto">group: ${esc(x.group)}</span></div>
+    <div class="vs">${side(x.page_a, x.title_a, x.quote_a)}<div class="mid">vs</div>${side(x.page_b, x.title_b, x.quote_b)}</div>
+    <div class="why">${esc(x.explanation)}</div></div>`).join("");
+}
+
+function allTable(items, rows) {
+  if (!items.length) return `<div class="empty">${result.stages.signals === "done" ? "Nothing flagged. Every page looks current." : "The report fills in after the crawl."}</div>`;
+  if (!rows.length) return `<div class="empty">No pages in this view.</div>`;
+  return `<div class="table-wrap" tabindex="0" role="region" aria-label="All issues"><table><caption class="sr-only">All issues, most serious first</caption><thead><tr><th scope="col" style="width:110px">Verdict</th><th scope="col">Page</th><th scope="col" style="width:220px">Issues</th>
+    <th scope="col" style="width:100px">Last edited</th><th scope="col" style="width:34%">Reason / evidence</th></tr></thead><tbody>${rows.map((i, idx) => {
+    const tags = [];
+    if (i.kind === "http") tags.push(`<span class="tag dead">HTTP ${i.status}</span>`);
+    if (i.stale) tags.push(`<span class="tag stale">stale</span>`);
+    if (i.outdated_mentions.length) tags.push(`<span class="tag outdated">outdated wording</span>`);
+    if (i.broken_links.length) tags.push(`<span class="tag broken">${i.broken_links.length} broken link${i.broken_links.length > 1 ? "s" : ""}</span>`);
+    if (i.expired_events.length) tags.push(`<span class="tag expired">${i.expired_events.length} expired event${i.expired_events.length > 1 ? "s" : ""}</span>`);
+    if (i.forms) tags.push(`<span class="tag info">${i.forms} form${i.forms > 1 ? "s" : ""}</span>`);
+    const detail = [
+      ...(i.broken_links.length ? ["<b>Broken links on this page</b>", ...i.broken_links.map(b => `✗ ${b.status}  ${b.url}`)] : []),
+      ...(i.expired_events.length ? ["<b>Expired events</b>", ...i.expired_events.map(e => `⌛ ${e.name || "(untitled)"} — ended ${String(e.endDate).slice(0, 10)}`)] : []),
+      ...(i.linked_from.length ? ["<b>Linked from</b>", ...i.linked_from] : []),
+    ];
+    const isOpen = open.has(i.url);
+    return `<tr><td>${verdictTag(i.verdict, i.status, i.url)}</td>
+      <td><div class="title">${esc(i.title || (i.kind === "http" ? "(page not found)" : i.url))}</div><div class="url"><a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.url)}</a></div></td>
+      <td><div class="tags">${tags.join("")}</div></td><td class="nowrap muted">${esc((i.last_modified || "—").slice(0, 10))}</td>
+      <td>${esc(i.reason) || '<span class="muted">—</span>'}${i.evidence ? `<div class="quote">“${esc(i.evidence)}”</div>` : ""}
+        ${detail.length ? `<div><button type="button" class="linkbtn" style="font-size:12px" data-detail="${esc(i.url)}" aria-expanded="${isOpen}" aria-controls="d-${idx}">${isOpen ? "Hide details" : "Show details"}<span class="sr-only"> for ${esc(i.title || i.url)}</span></button></div>` : ""}</td></tr>
+      ${detail.length ? `<tr class="detail ${isOpen ? "open" : ""}" id="d-${idx}"><td></td><td colspan="4"><div class="detail-box">${detail.map(d => `<div>${d.startsWith("<b>") ? d : esc(d)}</div>`).join("")}</div></td></tr>` : ""}`;
+  }).join("")}</tbody></table></div>`;
+}
+
+// ---------- export ----------
+
+function download(name, text, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = Object.assign(document.createElement("a"), { href: url, download: name });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function baseName(kind) {
+  let host = "site";
+  try { host = new URL(result.opts.site).hostname; } catch (e) {}
+  return `sweep-${kind}-${host}-${(result.started || "").slice(0, 10)}`;
+}
+function csv(cols, rows) {
+  const cell = v => { v = String(v ?? ""); return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; };
+  return "﻿" + [cols.join(","), ...rows.map(r => r.map(cell).join(","))].join("\r\n");
+}
+const VTEXT = { http: "dead (HTTP)", thinking: "not reviewed", pending: "not reviewed", none: "not reviewed" };
+
+$("expCsv").addEventListener("click", () => {
+  if (mainTab === "stale") {
+    download(baseName("stale") + ".csv", csv(
+      ["url", "title", "section", "last_modified", "age_days", "stale", "outdated_dates", "outdated_quotes", "expired_events", "ai_verdict", "ai_reason", "ai_evidence"],
+      staleItems().map(f => { const v = result.verdicts[f.url] || {}; return [
+        f.url, f.title, f.section, (f.last_modified || "").slice(0, 10), f.age_days ?? "", f.stale ? "yes" : "no",
+        f.outdated_mentions.map(m => m.date).join("; "), f.outdated_mentions.map(m => m.quote).join(" | "),
+        f.expired_events.map(e => `${e.name || "(untitled)"} (${String(e.endDate).slice(0, 10)})`).join("; "),
+        VTEXT[f.verdict] || f.verdict, v.reason || "", v.evidence || ""]; })), "text/csv;charset=utf-8");
+  } else if (mainTab === "contra") {
+    download(baseName("contradictions") + ".csv", csv(
+      ["severity", "topic", "page_a", "quote_a", "page_b", "quote_b", "explanation", "group"],
+      result.contradictions.map(c => [c.severity, c.topic, c.page_a, c.quote_a, c.page_b, c.quote_b, c.explanation, c.group])), "text/csv;charset=utf-8");
+  } else {
+    download(baseName("issues") + ".csv", csv(
+      ["verdict", "http_status", "url", "title", "issues", "last_modified", "stale", "reason", "evidence", "broken_links", "expired_events", "outdated_dates", "linked_from"],
+      allItems().map(i => [VTEXT[i.verdict] || i.verdict, i.status, i.url, i.title,
+        [i.kind === "http" && `HTTP ${i.status}`, i.stale && "stale", i.outdated_mentions.length && "outdated wording", i.broken_links.length && "broken links", i.expired_events.length && "expired events"].filter(Boolean).join("; "),
+        (i.last_modified || "").slice(0, 10), i.stale ? "yes" : "no", i.reason, i.evidence,
+        i.broken_links.map(b => `${b.status} ${b.url}`).join("; "),
+        i.expired_events.map(e => `${e.name || "(untitled)"} (${String(e.endDate).slice(0, 10)})`).join("; "),
+        i.outdated_mentions.map(m => m.date).join("; "), i.linked_from.join("; ")])), "text/csv;charset=utf-8");
+  }
+});
+$("expJson").addEventListener("click", () => {
+  const { log, digest_text, ...rest } = result;
+  download(baseName("run") + ".json", JSON.stringify(rest, null, 2), "application/json");
+});
+$("expMd").addEventListener("click", async () => {
+  const text = result.digest_text || await fetch(`/api/projects/${pid}/runs/${view}/digest`).then(r => r.ok ? r.text() : "");
+  if (text) download(baseName("digest") + ".md", text, "text/markdown");
+});
+
+// ---------- events ----------
+
+async function save() {
+  const d = await api.post("/api/projects", formData());
+  await loadProjects();
+  pid = d.project.id; store.set("sweep.project", pid);
+  renderProjectPicker(); fillForm(project());
+  return d.project;
+}
+$("form").addEventListener("submit", async e => {
+  e.preventDefault();
+  showError(""); try { await save(); say("Project saved."); if (!result) renderAll(); } catch (err) { showError(err.message); }
+});
+$("start").addEventListener("click", async () => {
+  showError("");
+  if (!$("form").reportValidity()) return;
+  try {
+    const p = await save();
+    const d = await api.post("/api/start", { project_id: p.id });
+    since = 0; savedHandled = null; invCache = { run: d.run_id, data: [] }; logKey = null;
+    live = { project_id: p.id, run_id: d.run_id, saved: false };
+    view = "live";
+    say("Sweep started.");
+  } catch (err) { showError(err.message); }
+});
+$("stop").addEventListener("click", () => api.post("/api/stop"));
+$("deleteBtn").addEventListener("click", async () => {
+  const p = project(); if (!p) return;
+  const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  const lost = [plural(p.runs.length, "saved run")];
+  if (p.remembered) lost.push(`${plural(p.remembered, "remembered AI verdict")} (a new project for this site would have to analyse those pages again, at API cost)`);
+  if (!confirm(`Delete “${p.name}”?\n\nThis removes ${lost.join(" and ")}.\n\nThis can't be undone.`)) return;
+  try { await api.post(`/api/projects/${p.id}/delete`); await loadProjects(); await selectProject(projects[0] ? projects[0].id : null); }
+  catch (err) { showError(err.message); }
+});
+$("newProject").addEventListener("click", () => selectProject(null));
+$("projectSel").addEventListener("change", e => selectProject(e.target.value || null));
+$("runSel").addEventListener("change", async e => {
+  if (e.target.value === "live") { view = "live"; result = liveResult(); logKey = null; }
+  else await loadRun(e.target.value);
+  renderAll();
+});
+for (const name of ["speed", "provider", "max_pages", "custom_min", "custom_max", "ai", "contradictions", "reuse_analysis", "custom_url", "custom_model", "custom_key_env"])
+  $("form")[name].addEventListener(name === "max_pages" || name.startsWith("custom") ? "input" : "change", renderNote);
+$("loadModels").addEventListener("click", async () => {
+  const b = $("loadModels"), out = $("testResult");
+  b.disabled = true; b.textContent = "Loading…"; out.className = "note c6 compat-ai"; out.textContent = "Asking the service which models it offers…";
+  try {
+    const r = await api.post("/api/list-models", { settings: formData().settings });
+    if (r.ok) {
+      $("modelList").innerHTML = r.models.map(m => `<option value="${esc(m)}"></option>`).join("");
+      out.className = "note c6 compat-ai good";
+      out.textContent = `Found ${r.models.length} models. Click the Model box to pick one, then press Test connection. Lists can include models retired for new accounts; Test connection will say so.`;
+      $("form").custom_model.focus();
+    } else { out.className = "note c6 compat-ai warn"; out.textContent = "Couldn't load models: " + r.message; }
+  } catch (err) { out.className = "note c6 compat-ai warn"; out.textContent = "Couldn't load models: " + err.message; }
+  b.disabled = false; b.textContent = "Load models";
+});
+$("testAi").addEventListener("click", async () => {
+  const b = $("testAi"), out = $("testResult");
+  b.disabled = true; b.textContent = "Testing…"; out.className = "note c6 compat-ai"; out.textContent = "Contacting the endpoint…";
+  try {
+    const r = await api.post("/api/test-provider", { settings: formData().settings });
+    out.className = "note c6 compat-ai " + (r.ok ? "good" : "warn");
+    out.textContent = (r.ok ? "Connected. " : "Not working: ") + r.message;
+  } catch (err) { out.className = "note c6 compat-ai warn"; out.textContent = "Not working: " + err.message; }
+  b.disabled = false; b.textContent = "Test connection";
+});
+function pickTab(t, focus) {
+  mainTab = t; subFilter = "all"; store.set("sweep.tab", mainTab); renderReport();
+  if (focus) $("tab-" + t).focus();
+}
+$("mainTabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) pickTab(b.dataset.t); });
+$("mainTabs").addEventListener("keydown", e => {
+  const order = ["stale", "contra", "all"], i = order.indexOf(mainTab);
+  const next = { ArrowRight: order[(i + 1) % 3], ArrowLeft: order[(i + 2) % 3], Home: order[0], End: order[2] }[e.key];
+  if (next) { e.preventDefault(); pickTab(next, true); }
+});
+$("tabs").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  subFilter = b.dataset.f; renderReport();
+  const again = $("tabs").querySelector(`[data-f="${subFilter}"]`); if (again) again.focus();
+});
+$("report").addEventListener("click", e => {
+  const b = e.target.closest("button[data-detail]"); if (!b) return;
+  const u = b.dataset.detail;
+  open.has(u) ? open.delete(u) : open.add(u);
+  renderReport();
+  const again = [...$("report").querySelectorAll("button[data-detail]")].find(x => x.dataset.detail === u);
+  if (again) again.focus();
+});
+let rt; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => result && renderCharts(true), 150); });
+
+(async function init() {
+  if (STATIC) {
+    document.querySelector("#form").closest("section").hidden = true;
+    $("newProject").hidden = true;
+    document.querySelector(".topnav form")?.remove();
+    const b = $("banner");
+    b.classList.remove("hidden");
+    b.textContent = `Read-only snapshot of the ${fmtWhen(STATIC.result.started)} sweep of ${STATIC.result.opts.site}, published ${fmtWhen(STATIC.published)}.`;
+    await loadProjects();
+    await selectProject(STATIC.project.id, STATIC.result.run_id);
+    return;
+  }
+  api.get("/api/me").then(u => { $("who").textContent = `Signed in as ${u.name}${u.email && u.email !== u.name ? ` (${u.email})` : ""}`; }).catch(() => {});
+  await loadProjects().catch(() => {});
+  const saved = store.get("sweep.project");
+  try { live = (await api.get("/api/state?inv=1")).run; if (live) { since = live.log.length ? live.log[live.log.length - 1].t : 0; invCache = { run: live.run_id, data: live.inventory || [] }; if (live.saved) savedHandled = live.run_id; } } catch (e) {}
+  await selectProject(projects.find(p => p.id === saved) ? saved : projects[0] ? projects[0].id : null);
+  poll();
+})();
+</script>
+</body>
+</html>

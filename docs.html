@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Documents · Nightly Sweep</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #1b1f24; --muted: #5c6570; --line: #e3e6ea; --field: #7d8590;
+    --accent: #2158b8; --accent-bg: #e7effc; --btn: #2563c9; --focus: #2563c9;
+    --warn: #8a5a10; --warn-bg: #fbf1e0; --code-bg: #f1f3f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1216; --panel: #171b21; --ink: #e6e9ed; --muted: #9da5ae; --line: #262c34; --field: #6e7681;
+      --accent: #8ab4ff; --accent-bg: #172440; --focus: #8ab4ff; --warn: #e0a84a; --warn-bg: #2e2414; --code-bg: #20252c;
+    }
+  }
+  * { box-sizing: border-box; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; }
+  .skip { position: absolute; left: 16px; top: -60px; background: var(--btn); color: #fff; padding: 10px 14px; border-radius: 6px; z-index: 20; font-weight: 600; }
+  .skip:focus { top: 8px; }
+  .topnav { background: var(--panel); border-bottom: 1px solid var(--line); }
+  .topnav .in { max-width: 1240px; margin: 0 auto; padding: 8px 16px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .topnav nav { display: flex; gap: 4px; }
+  .topnav nav a { color: var(--ink); text-decoration: none; padding: 8px 12px; border-radius: 6px; font-weight: 600; font-size: 14px; }
+  .topnav nav a:hover { background: var(--bg); }
+  .topnav nav a[aria-current="page"] { background: var(--accent-bg); color: var(--accent); }
+  .topnav form { margin: 0 0 0 auto; }
+  .topnav button { font: inherit; font-size: 12px; background: var(--bg); color: var(--ink); border: 1px solid var(--field); border-radius: 6px; padding: 5px 10px; min-height: 28px; cursor: pointer; }
+  .layout { max-width: 1240px; margin: 0 auto; padding: 24px 16px 80px; display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 32px; align-items: start; }
+  .toc { position: sticky; top: 16px; font-size: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; max-height: calc(100vh - 32px); overflow: auto; }
+  .toc h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 8px; padding: 0; border: 0; }
+  .toc ol { margin: 0; padding-left: 20px; }
+  .toc li { margin: 4px 0; }
+  .toc a { color: var(--accent); }
+  article { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 32px 32px; max-width: 860px; }
+  h1 { font-size: 28px; margin: 24px 0 8px; }
+  .lede { font-size: 18px; color: var(--muted); margin-top: 0; }
+  h2 { font-size: 22px; margin: 40px 0 8px; padding-top: 16px; border-top: 1px solid var(--line); scroll-margin-top: 16px; }
+  h3 { font-size: 17px; margin: 24px 0 6px; scroll-margin-top: 16px; }
+  a { color: var(--accent); }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; background: var(--code-bg); border-radius: 4px; padding: 1px 5px; overflow-wrap: anywhere; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; font-size: 14px; line-height: 1.5; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; margin: 12px 0; }
+  .tw { overflow-x: auto; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--bg); font-size: 14px; }
+  .note { background: var(--accent-bg); border-left: 4px solid var(--accent); padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 14px 0; }
+  .caution { background: var(--warn-bg); border-left: 4px solid var(--warn); padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 14px 0; }
+  dt { font-weight: 700; margin-top: 12px; }
+  dd { margin: 2px 0 0 0; }
+  li { margin: 4px 0; }
+  .top { font-size: 14px; }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: minmax(0, 1fr); }
+    .toc { position: static; max-height: none; }
+    article { padding: 4px 18px 24px; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to main content</a>
+<header class="topnav">
+  <div class="in">
+    <nav aria-label="Main">
+      <a href="/dashboard">Dashboard</a>
+      <a href="/docs" aria-current="page">Documents</a>
+    </nav>
+    <form method="post" action="/logout"><button type="submit">Sign out</button></form>
+  </div>
+</header>
+
+<div class="layout">
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#overview">What this is</a></li>
+      <li><a href="#start">Getting started</a></li>
+      <li><a href="#projects">Projects and runs</a></li>
+      <li><a href="#pipeline">How a sweep works</a></li>
+      <li><a href="#speed">Crawl speed and throttling</a></li>
+      <li><a href="#stale">Stale and outdated content</a></li>
+      <li><a href="#dead">Dead pages, broken links, expired events</a></li>
+      <li><a href="#triage">AI triage</a></li>
+      <li><a href="#reuse">Reusing earlier verdicts</a></li>
+      <li><a href="#contradictions">Contradictions</a></li>
+      <li><a href="#dashboard">Reading the dashboard</a></li>
+      <li><a href="#reports">Reports and exports</a></li>
+      <li><a href="#accounts">Accounts and sign-in</a></li>
+      <li><a href="#admin">Admin command line</a></li>
+      <li><a href="#data">Data, privacy and safety</a></li>
+      <li><a href="#settings">Settings reference</a></li>
+      <li><a href="#a11y">Accessibility</a></li>
+      <li><a href="#trouble">Troubleshooting</a></li>
+    </ol>
+  </nav>
+
+  <main id="main" tabindex="-1">
+  <article>
+    <h1>Documents</h1>
+    <p class="lede">How the nightly site sweep works, what each finding means, and how to run and administer it.</p>
+
+    <h2 id="overview">1. What this is</h2>
+    <p>The sweep finds pages on a public website that have quietly stopped being true, and tells a person about them. It never changes the site: it reads public pages the same way any visitor does.</p>
+    <p>It looks for six kinds of problem:</p>
+    <ul>
+      <li><strong>Stale pages</strong>: not edited in a long time (18 months by default).</li>
+      <li><strong>Outdated wording</strong>: past dates still written as if they are ahead, such as “Registration closes May 15, 2024”.</li>
+      <li><strong>Contradictions</strong>: two pages, or one page, stating incompatible facts, such as two different fees for the same permit.</li>
+      <li><strong>Dead pages</strong>: addresses that answer 404 (not found) or 403 (forbidden).</li>
+      <li><strong>Broken links</strong>: links on a page that lead to an error.</li>
+      <li><strong>Expired events</strong>: events marked up with an end date that has passed.</li>
+    </ul>
+    <p>For flagged pages, an AI model gives a verdict: is the page still doing its job (<em>live</em>), describing something that has ended (<em>dead</em>), or impossible to tell (<em>unclear</em>)? Age alone is never treated as a problem. A city charter from 1998 can be perfectly current.</p>
+
+    <h2 id="start">2. Getting started</h2>
+    <ol>
+      <li>Install once, in the project folder:
+        <pre tabindex="0"><code>python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt</code></pre></li>
+      <li>Create your account (you'll be asked for a password of at least 12 characters):
+        <pre tabindex="0"><code>.venv/bin/python manage.py add-user yourname --admin</code></pre></li>
+      <li>Optional, for the AI steps: copy <code>.env.example</code> to <code>.env</code> and add <code>ANTHROPIC_API_KEY</code>.</li>
+      <li>Start the dashboard and open <a href="http://127.0.0.1:8765">http://127.0.0.1:8765</a>. That address shows the product page; <strong>Sign in</strong> (top right) takes you to the dashboard at <code>/dashboard</code>:
+        <pre tabindex="0"><code>.venv/bin/python dashboard.py</code></pre></li>
+      <li>Fill in a project name and site URL, choose a crawl speed, and press <strong>Start sweep</strong>.</li>
+    </ol>
+    <p>To restart the dashboard, press <kbd>Ctrl</kbd>+<kbd>C</kbd> in its terminal and run the start command again. Saved projects, runs and accounts are kept. A sweep that was running is lost.</p>
+
+    <h2 id="projects">3. Projects and runs</h2>
+    <p>A <strong>project</strong> is one website plus its settings. Pick a project from the menu at the top of the dashboard, or press <strong>+ New project</strong>. <strong>Save</strong> stores the settings. <strong>Start sweep</strong> saves and then runs.</p>
+    <p>Every sweep is a <strong>run</strong>, and every run is saved, including runs that were stopped or failed. The <strong>Run</strong> menu reopens any earlier run with all its data, charts and reports. While a sweep is in progress the menu shows “Live — running now”.</p>
+    <p>Only one sweep runs at a time across all projects. If one is running for another project, a banner says so and links to it.</p>
+    <p><strong>Delete project</strong> removes the project folder: its settings, every saved run, and its remembered AI verdicts. You are asked to confirm, and it can't be undone.</p>
+
+    <h2 id="pipeline">4. How a sweep works</h2>
+    <p>A run moves through seven steps, shown as cards across the top of the dashboard.</p>
+    <div class="tw" tabindex="0" role="region" aria-label="The seven steps of a sweep"><table>
+      <caption class="sr-only">The seven steps of a sweep</caption>
+      <thead><tr><th scope="col">Step</th><th scope="col">What happens</th><th scope="col">Uses AI?</th></tr></thead>
+      <tbody>
+        <tr><td>Discover</td><td>Reads <code>robots.txt</code> and the sitemap. The sitemap supplies page addresses and last-edited dates.</td><td>No</td></tr>
+        <tr><td>Crawl</td><td>Fetches pages, starting from the sitemap and following links within the site, up to the page limit. Menus, headers and footers are removed before analysis.</td><td>No</td></tr>
+        <tr><td>Links</td><td>Checks every link target that wasn't itself crawled.</td><td>No</td></tr>
+        <tr><td>Signals</td><td>Works out each page's age, finds outdated wording, dead pages, broken links and expired events, and flags pages worth a closer look.</td><td>No</td></tr>
+        <tr><td>AI triage</td><td>Sends flagged pages, eight at a time, to the model for a live, dead or unclear verdict.</td><td>Yes</td></tr>
+        <tr><td>Contradictions</td><td>Groups related pages and asks the model to compare each group.</td><td>Yes</td></tr>
+        <tr><td>Digest</td><td>Writes the Markdown summary and saves the run.</td><td>No</td></tr>
+      </tbody>
+    </table></div>
+    <p>The first four steps cost nothing and need no API key. Without a key, the AI steps are skipped and everything else still works.</p>
+
+    <h2 id="speed">5. Crawl speed and throttling</h2>
+    <p>Sites block crawlers that hit them hard. The sweep is built to be a light, steady visitor.</p>
+    <div class="tw" tabindex="0" role="region" aria-label="Crawl speed presets"><table>
+      <caption class="sr-only">Crawl speed presets</caption>
+      <thead><tr><th scope="col">Speed</th><th scope="col">Gap between requests</th><th scope="col">Extra pauses</th><th scope="col">About 200 pages</th></tr></thead>
+      <tbody>
+        <tr><td>Human-paced</td><td>4–12 seconds, random</td><td>8% chance of a 20–45 second pause</td><td>35 minutes</td></tr>
+        <tr><td>Polite (default)</td><td>1.5–4 seconds</td><td>4% chance of an 8–15 second pause</td><td>11 minutes</td></tr>
+        <tr><td>Standard</td><td>0.4–0.8 seconds</td><td>None</td><td>2 minutes</td></tr>
+        <tr><td>Custom</td><td>Your own minimum and maximum</td><td>None</td><td>Shown on the form</td></tr>
+      </tbody>
+    </table></div>
+    <p>Link checks add time on top of the page count.</p>
+    <p>Whatever the speed:</p>
+    <ul>
+      <li><strong>One request at a time.</strong> Only one request to the site is ever in flight.</li>
+      <li><strong>Automatic slow-down.</strong> If the site answers 429 (too many requests) or 503 (unavailable), the crawler waits as long as the site asks (its <code>Retry-After</code>, up to five minutes), doubles its gaps, and tries once more. After ten normal responses in a row it speeds back up.</li>
+      <li><strong>robots.txt is obeyed</strong>, including any <code>Crawl-delay</code>, which becomes the minimum gap.</li>
+      <li><strong>Honest identity.</strong> Every request says <code>NightlySweep/1.0 (site health audit …)</code>, so the web team can see exactly who is visiting. The crawler does not pretend to be a person's browser.</li>
+    </ul>
+    <div class="note">If a site still blocks the crawler, use Polite or Human-paced and ask the site owner to allow the <code>NightlySweep</code> user agent. That is more reliable than any disguise, and on a public-sector site it is the right thing to do.</div>
+    <p>The line under the step cards reports how the crawl went, for example “2 reading pauses · slowed down 1× when the site pushed back”.</p>
+
+    <h2 id="stale">6. Stale and outdated content</h2>
+    <h3>How a page's age is measured</h3>
+    <p>A page's age is the time since its last edit. The date comes from the sitemap's <code>&lt;lastmod&gt;</code> or, failing that, the page's <code>Last-Modified</code> header. Pages that publish neither are shown as “No date”. A page is <strong>stale</strong> when it is older than the project's “Stale after” setting.</p>
+    <div class="caution">Some content systems report every page as edited “now”, which makes everything look fresh. If the Content age chart puts nearly every page under 3 months, check whether the site's dates can be trusted.</div>
+    <h3>Outdated wording</h3>
+    <p>A page can have a recent date and still be out of date. The sweep reads every page for dates that have already passed but sit next to forward-looking words such as <em>upcoming</em>, <em>will be held</em>, <em>deadline</em>, <em>register</em>, <em>closes</em>, <em>join us</em>, <em>until</em> or <em>apply by</em>. It recognises dates written as “May 15, 2024”, “15 May 2024”, “2024-05-15” and “5/15/2024”.</p>
+    <p>Each match is shown with the surrounding sentence and the date highlighted. This check is free, and pages it catches are sent to the AI first.</p>
+    <h3>The Stale &amp; outdated report</h3>
+    <p>Lists every page that is stale, has outdated wording, or has an expired event, oldest first. Each row shows the section of the site, the last edit, the signals found, the AI verdict, and the evidence. “Old, but the text shows no sign of being out of date” means the page is merely old, which is often fine.</p>
+
+    <h2 id="dead">7. Dead pages, broken links, expired events</h2>
+    <dl>
+      <dt>Dead pages</dt>
+      <dd>Addresses that answer 404 or 403. They are <em>not</em> counted as crawled pages. The report lists which pages link to each one, so you know where to fix the link.</dd>
+      <dt>Failed to load</dt>
+      <dd>Other errors, such as 500 errors or timeouts. These aren't counted as crawled either, and appear as their own tile only when there are some.</dd>
+      <dt>Broken links</dt>
+      <dd>Links on a crawled page that lead to an error, including links to other websites.</dd>
+      <dt>Expired events</dt>
+      <dd>Events described in the page's structured data (schema.org <code>Event</code>) whose end date has passed.</dd>
+    </dl>
+
+    <h2 id="triage">8. AI triage</h2>
+    <p>Flagged pages, up to 120 per run, are sent to the model in batches of eight with their title, last-edited date, forms, email addresses, outdated dates, expired events and text. Pages with outdated wording or expired events go first, then stale pages, oldest first.</p>
+    <p>The model is told that age alone is never evidence, to use <em>unclear</em> freely because a wrong “dead” costs a web team more than an honest “unclear”, and to quote its evidence word for word from the page.</p>
+    <dl>
+      <dt>Dead</dt><dd>Describes something that has ended: a closed application window, a past event presented as upcoming, a programme that was retired.</dd>
+      <dt>Unclear</dt><dd>The text doesn't say. Someone who knows the programme should look.</dd>
+      <dt>Live</dt><dd>Still true, even if old. Charters, ordinances, contact pages and reference material are normally live.</dd>
+    </dl>
+    <h3 id="providers">Choosing the AI provider</h3>
+    <p>Each project picks its provider. Both AI steps, triage and contradictions, use it. The run header shows which model a run used.</p>
+    <div class="tw" tabindex="0" role="region" aria-label="AI providers"><table>
+      <caption class="sr-only">AI providers</caption>
+      <thead><tr><th scope="col">Provider</th><th scope="col">Model</th><th scope="col">Key in <code>.env</code></th></tr></thead>
+      <tbody>
+        <tr><td>Anthropic</td><td>Set in <code>triage.py</code> (currently <code>claude-sonnet-4-6</code>)</td><td><code>ANTHROPIC_API_KEY</code></td></tr>
+        <tr><td>xAI (Grok)</td><td>Set in <code>triage.py</code> (currently <code>grok-4</code>)</td><td><code>XAI_API_KEY</code></td></tr>
+        <tr><td>Google Gemini, OpenAI, Groq, OpenRouter</td><td>Your choice. <strong>Load models</strong> lists what your account offers.</td><td><code>GEMINI_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>GROQ_API_KEY</code>, <code>OPENROUTER_API_KEY</code></td></tr>
+        <tr><td>Ollama, LM Studio (local)</td><td>Your choice, from the app running on your computer</td><td>none</td></tr>
+        <tr><td>Other (custom endpoint)</td><td>Any model you name</td><td>Any key in <code>.env</code> ending in <code>_API_KEY</code> or <code>_TOKEN</code>, or none</td></tr>
+      </tbody>
+    </table></div>
+    <h3 id="named-services">Gemini, OpenAI, Groq, OpenRouter, Ollama and LM Studio</h3>
+    <ol>
+      <li>Add the key to <code>.env</code> using the name in the table above, for example <code>GEMINI_API_KEY=…</code>, and restart the dashboard. Local apps need no key.</li>
+      <li>Choose the service under <strong>AI provider</strong>. The line below the form says whether its key was found.</li>
+      <li>Press <strong>Load models</strong>, then pick a model from the <strong>Model</strong> box.</li>
+      <li>Press <strong>Test connection</strong>. Service model lists can include models retired for new accounts. If so, the test shows the service's message, which usually names the replacement.</li>
+    </ol>
+    <h3 id="custom-provider">Other (custom endpoint)</h3>
+    <p>Use any other service that accepts the OpenAI chat-completions format. Choose <strong>Other (custom endpoint)</strong> under AI provider and fill in:</p>
+    <dl>
+      <dt>Endpoint URL</dt><dd>The service's base address. <code>/chat/completions</code> is added for you.</dd>
+      <dt>Model name</dt><dd>Exactly as the service spells it.</dd>
+      <dt>API key from .env</dt><dd>Pick the key from the list of keys found in <code>.env</code> whose names end in <code>_API_KEY</code> or <code>_TOKEN</code>. The key itself never goes in the form or the project. Choose “None” for local models.</dd>
+    </dl>
+    <p>Add the key to <code>.env</code> first and restart the dashboard so it appears in the list. Press <strong>Test connection</strong> to send a one-line request and see the reply, or the exact error, before you run a sweep.</p>
+    <ul>
+      <li><strong>Only keys in <code>.env</code> are used.</strong> A key that exists only in your terminal's environment is ignored. The Anthropic and xAI keys can't be given to a custom endpoint. Together these mean nobody signed in to the dashboard can point a custom endpoint at their own server and collect one of your keys.</li>
+      <li>Newer OpenAI models want <code>max_completion_tokens</code> instead of <code>max_tokens</code>. The dashboard notices and retries automatically.</li>
+      <li>Requests to these services wait up to five minutes, since local models can be slow. When a service is busy or rate-limited (429 or 503), the request is retried twice, honouring the service's Retry-After.</li>
+      <li>Small local models may not follow the instructions well. They can return malformed answers, which are skipped, or weaker verdicts. Compare a run against one from a hosted model before relying on it.</li>
+      <li>Changing the provider or model means earlier verdicts aren't reused (section 9), so the next run re-analyses every flagged page.</li>
+    </ul>
+
+    <h2 id="reuse">9. Reusing earlier verdicts</h2>
+    <p>Each project remembers the verdict for every page the AI has judged. On the next run, a page that hasn't changed gets its earlier verdict back without an API call, marked “↺ reused from” and the date.</p>
+    <p>“Unchanged” means that everything the model would be shown is identical: title, text, forms, email addresses, expired events, and the dates on the page that have already passed. So a page is judged again when:</p>
+    <ul>
+      <li>any of its wording changes;</li>
+      <li>one of its dates passes. An untouched page reading “Registration closes November 1” is looked at again once November 1 is behind us;</li>
+      <li>the AI provider or the instructions given to the model change.</li>
+    </ul>
+    <p>Untick <strong>Reuse AI verdicts for unchanged pages</strong> for a run to make the AI look at every flagged page fresh. The memory is stored in <code>projects/&lt;project&gt;/analysis.json</code> and is deleted with the project.</p>
+    <div class="note">Contradiction results are never reused. The contradiction check runs across the whole site every time, because a page that hasn't changed can start contradicting one that has.</div>
+
+    <h2 id="contradictions">10. Contradictions</h2>
+    <h3>Step 1: group related pages (no AI)</h3>
+    <p>Comparing every page with every other page would cost too much, and most pairs are unrelated. So the sweep first finds, for each page, the words that are distinctive to it, ignoring words used across most of the site. Pages that share many distinctive words are paired, and the most similar pairs are built into groups of two to four pages. Each group is labelled with its shared words, for example “permits, permit, building”.</p>
+    <h3>Step 2: the AI compares each group</h3>
+    <p>Each group is sent with the full text of its pages. The model looks for statements that can't both be true about the same thing (fees, deadlines, dates, hours, phone numbers, addresses, eligibility rules, requirements, named officials), across the pages and within each page. It is told that different programmes, years or audiences are not contradictions, that an old date alone is not one, and to leave out anything it is unsure of.</p>
+    <h3>Step 3: every quote is checked</h3>
+    <p>Each contradiction must quote both statements word for word. The sweep searches the actual page text for both quotes and discards any claim it can't find. The report says how many were discarded. Everything you see is two real sentences from the site.</p>
+    <h3>Severity</h3>
+    <dl>
+      <dt>High</dt><dd>A resident acting on the wrong statement could pay the wrong amount, miss a deadline, go to the wrong place or call the wrong number.</dd>
+      <dt>Medium</dt><dd>Confusing, but low consequence.</dd>
+      <dt>Low</dt><dd>Cosmetic.</dd>
+    </dl>
+    <h3>Limits to know about</h3>
+    <ul>
+      <li>By default 12 groups are compared, so at most 48 pages. Raise “Groups to compare” (up to 40) for wider coverage, at one AI call per group.</li>
+      <li>Each page joins only one group, so a fact repeated on several unrelated pages can be missed.</li>
+      <li>Pages worded very differently may never be grouped together.</li>
+      <li>Pages under about 40 words are skipped, as is text beyond the first 6,000 characters of a page.</li>
+    </ul>
+
+    <h2 id="dashboard">11. Reading the dashboard</h2>
+    <dl>
+      <dt>Counts</dt><dd>The headline numbers for the run you are viewing. “Pages crawled” counts only pages that loaded successfully.</dd>
+      <dt>Content age</dt><dd>How many pages were last edited in each age range. Blue is recent, orange is stale, grey publishes no date. The dashed line marks your stale cutoff. The sentence above the chart gives the stale share and the median age.</dd>
+      <dt>Where the stale pages are</dt><dd>One bar per site section (the first part of the address, like <code>/parks</code>). The bar's length is the number of pages in the section, split into stale, recent and no-date pages. Sections with the most stale pages come first, so you know which department to talk to.</dd>
+      <dt>Trend across runs</dt><dd>Stale pages, broken links, dead pages and contradictions for each completed run of the project. It appears after the second completed run.</dd>
+      <dt>Findings mix</dt><dd>The split of AI verdicts, and contradictions by severity.</dd>
+      <dt>Activity</dt><dd>A timestamped log of every request, slow-down, verdict and contradiction. Long lines scroll sideways.</dd>
+    </dl>
+    <p>Hover over a chart for exact numbers, or open “View as table” beneath it for the same data as a table.</p>
+
+    <h2 id="reports">12. Reports and exports</h2>
+    <p>The report has three views. Use the arrow keys to move between them once the view list has focus.</p>
+    <ul>
+      <li><strong>Stale &amp; outdated</strong>: the stale-content focus described in section 6.</li>
+      <li><strong>Contradictions</strong>: each conflict with the two quotes side by side, links to both pages, severity, and an explanation.</li>
+      <li><strong>All issues</strong>: everything, including dead pages and broken links. Use “Show details” on a row for its broken links, expired events, or the pages linking to a dead page.</li>
+    </ul>
+    <div class="tw" tabindex="0" role="region" aria-label="Export formats"><table>
+      <caption class="sr-only">Export formats</caption>
+      <thead><tr><th scope="col">Button</th><th scope="col">What you get</th></tr></thead>
+      <tbody>
+        <tr><td>Export CSV</td><td>The current view as a spreadsheet that opens directly in Excel, with every row whatever filter is selected.</td></tr>
+        <tr><td>Export JSON</td><td>The whole run: settings, counts, every page, verdict and contradiction.</td></tr>
+        <tr><td>Download digest (.md)</td><td>The human summary that the nightly job emails. It covers dead pages, unclear pages, outdated wording, contradictions, broken links and expired events.</td></tr>
+      </tbody>
+    </table></div>
+    <p>Tip: add <code>#contra</code>, <code>#stale</code> or <code>#all</code> to the dashboard address to open that view directly.</p>
+
+    <h2 id="accounts">13. Accounts and sign-in</h2>
+    <p>Everyone must sign in. There are two ways.</p>
+    <h3>Username and password</h3>
+    <ul>
+      <li>Accounts are created from the command line (section 14). Passwords must be at least 12 characters.</li>
+      <li>Passwords are never stored. Only a salted <strong>scrypt</strong> hash is kept, in <code>auth/users.json</code>, which only the account running the dashboard can read.</li>
+      <li>After five wrong passwords in 15 minutes the account is locked for 15 minutes. An admin can unlock it straight away.</li>
+      <li>Password managers and pasting are fully supported.</li>
+    </ul>
+    <h3>Sign in with Google</h3>
+    <p>For Google Workspace organisations. To turn it on:</p>
+    <ol>
+      <li>In Google Cloud Console, open <em>APIs &amp; Services → Credentials</em> and create an <strong>OAuth client ID</strong> of type <em>Web application</em>.</li>
+      <li>Add this <strong>Authorized redirect URI</strong> exactly: <code>http://127.0.0.1:8765/auth/google/callback</code>. Run <code>manage.py status</code> to see the address for your setup.</li>
+      <li>Put the details in <code>.env</code> and restart the dashboard:
+        <pre tabindex="0"><code>GOOGLE_CLIENT_ID=1234-abc.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=GOCSPX-...
+GOOGLE_ALLOWED_DOMAIN=yourcity.gov</code></pre></li>
+    </ol>
+    <p>Who can sign in with Google:</p>
+    <ul>
+      <li>With <code>GOOGLE_ALLOWED_DOMAIN</code> set, anyone with a verified account in that Workspace domain. Their account is created on first sign-in. Several domains can be separated with commas.</li>
+      <li>Without it, only people an admin has added with <code>--email</code>.</li>
+      <li>A disabled account can't sign in with Google either.</li>
+    </ul>
+    <p>The sign-in uses the standard secure authorisation flow (OpenID Connect with PKCE). The dashboard checks that the answer came from Google, was meant for this dashboard, is recent, matches the sign-in that was started, and belongs to a verified email in the allowed domain.</p>
+    <div class="caution">Open the dashboard at the same address as the redirect URI (<code>127.0.0.1</code>, not <code>localhost</code>). Otherwise the browser can't match the sign-in and you'll be asked to try again.</div>
+    <h3>Sessions</h3>
+    <p>A sign-in lasts until you press <strong>Sign out</strong>, or after 24 hours without using the dashboard, and never longer than 30 days. Restarting the dashboard does not sign anyone out.</p>
+
+    <h2 id="admin">14. Admin command line</h2>
+    <p>Anyone who can run commands in the project folder can manage accounts, without signing in. This is the admin override: use it to create the first account, reset a forgotten password, or get back in if you're locked out. Changes apply to a running dashboard immediately.</p>
+<pre tabindex="0"><code>.venv/bin/python manage.py add-user andy --admin          # asks for a password
+.venv/bin/python manage.py add-user sam --email sam@city.gov --google-only
+.venv/bin/python manage.py set-password andy              # reset; also unlocks and signs out old sessions
+.venv/bin/python manage.py unlock andy
+.venv/bin/python manage.py login-link andy                # one-time sign-in link, valid 10 minutes
+.venv/bin/python manage.py disable sam                    # blocks the account and signs it out
+.venv/bin/python manage.py enable sam
+.venv/bin/python manage.py remove-user sam
+.venv/bin/python manage.py sign-out                       # everyone, or: sign-out andy
+.venv/bin/python manage.py list                           # accounts, how they sign in, locked or not
+.venv/bin/python manage.py status                         # Google settings and redirect URI</code></pre>
+    <p><strong>login-link</strong> prints an address that signs that person in once, then stops working. It expires after 10 minutes (change with <code>--minutes</code>). Use it when someone is locked out and can't wait, or when Google sign-in is down.</p>
+    <p>For scripts, <code>add-user</code> and <code>set-password</code> accept <code>--password-stdin</code>.</p>
+
+    <h2 id="data">15. Data, privacy and safety</h2>
+    <ul>
+      <li><strong>Read-only.</strong> The sweep never submits forms, signs in to the target site, or changes anything on it.</li>
+      <li><strong>Sent to the AI provider:</strong> the title, date and text (up to a few thousand characters) of flagged pages, and the text of pages compared for contradictions. These are public pages. With a custom provider this goes to whatever endpoint you set; with a local model it never leaves your machine. Nothing else is sent.</li>
+      <li><strong>Stored locally</strong> in the project folder:
+        <ul>
+          <li><code>projects/</code>: settings, runs and remembered verdicts.</li>
+          <li><code>auth/</code>: accounts and sessions, readable only by your user.</li>
+          <li><code>.env</code>: API keys and Google settings.</li>
+        </ul>
+        Keep <code>.env</code> and <code>auth/</code> out of version control. The included <code>.gitignore</code> does this.</li>
+      <li><strong>Local only by default.</strong> The dashboard listens only on this computer (<code>127.0.0.1</code>). To share it with a team, put it behind HTTPS (a reverse proxy) and set <code>COOKIE_SECURE=1</code> in <code>.env</code>. Don't expose it over plain HTTP.</li>
+      <li><strong>Browser protections.</strong> Cookies are HttpOnly and SameSite. Requests from other sites are refused, the dashboard can't be framed by another site, and addresses aren't leaked to other sites.</li>
+    </ul>
+
+    <h2 id="settings">16. Settings reference</h2>
+    <div class="tw" tabindex="0" role="region" aria-label="Project settings"><table>
+      <caption class="sr-only">Project settings</caption>
+      <thead><tr><th scope="col">Setting</th><th scope="col">Default</th><th scope="col">What it does</th></tr></thead>
+      <tbody>
+        <tr><td>Max pages</td><td>200</td><td>Upper limit on pages fetched, from 1 to 5,000.</td></tr>
+        <tr><td>Stale after (months)</td><td>18</td><td>Pages older than this are stale.</td></tr>
+        <tr><td>Crawl speed</td><td>Polite</td><td>See section 5.</td></tr>
+        <tr><td>Min / Max gap</td><td>2 / 5 s</td><td>Custom speed only.</td></tr>
+        <tr><td>AI provider</td><td>Anthropic</td><td>Anthropic, xAI, or a custom OpenAI-compatible endpoint (section 8).</td></tr>
+        <tr><td>Endpoint URL / Model name / API key setting</td><td>empty</td><td>Custom provider only. The key setting is the name of a line in <code>.env</code>, never the key itself.</td></tr>
+        <tr><td>Check links</td><td>On</td><td>Checks every link target. Turn it off for a faster crawl.</td></tr>
+        <tr><td>AI triage of flagged pages</td><td>On</td><td>Live, dead or unclear verdicts.</td></tr>
+        <tr><td>Reuse AI verdicts for unchanged pages</td><td>On</td><td>See section 9.</td></tr>
+        <tr><td>Find contradictions</td><td>On</td><td>See section 10.</td></tr>
+        <tr><td>Groups to compare</td><td>12</td><td>Maximum groups sent for the contradiction check, from 1 to 40, one AI call each.</td></tr>
+      </tbody>
+    </table></div>
+    <p>Environment settings in <code>.env</code>: <code>ANTHROPIC_API_KEY</code>, <code>XAI_API_KEY</code>, <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code>, <code>GOOGLE_ALLOWED_DOMAIN</code>, <code>GOOGLE_REDIRECT_URI</code> (only if the dashboard runs at a different address), <code>COOKIE_SECURE</code>, and any key named in a custom provider's settings.</p>
+
+    <h2 id="a11y">17. Accessibility</h2>
+    <p>The dashboard, this page and the sign-in page are built to meet <strong>WCAG 2.2 level AA</strong>, which includes all of WCAG 2.1 AA, the level the U.S. ADA Title II rule requires of public-sector web content. WCAG 3 is still a draft and has no AA level yet.</p>
+    <ul>
+      <li>Everything works with a keyboard. A “Skip to main content” link comes first, focus is always visible, and the report views are tabs you move between with the arrow keys.</li>
+      <li>Text and controls meet contrast minimums in light and dark mode. The page follows your system's dark-mode setting.</li>
+      <li>Every chart has a text description and a “View as table” equivalent, and colour is never the only way information is shown.</li>
+      <li>Screen readers hear when a sweep starts, moves to a new step, and finishes. Form errors are announced.</li>
+      <li>Pages reflow to a narrow phone width. Wide data tables and the activity log scroll sideways within their own area.</li>
+      <li>Animations stop if your system asks for reduced motion. Hover tooltips close with <kbd>Esc</kbd>.</li>
+      <li>Sign-in needs no puzzle or memory test: password managers, pasting and Google sign-in all work. Sessions last at least 24 hours, so nothing times out mid-task.</li>
+    </ul>
+    <p>Automated testing with axe-core is part of how these pages are checked. Automated tools catch only part of WCAG, so manual review with a screen reader remains worthwhile.</p>
+
+    <h2 id="trouble">18. Troubleshooting</h2>
+    <dl>
+      <dt>“No accounts yet” on the sign-in page</dt>
+      <dd>Run <code>.venv/bin/python manage.py add-user yourname --admin</code>, then reload.</dd>
+      <dt>Locked out, or forgot the password</dt>
+      <dd><code>manage.py set-password yourname</code> resets and unlocks the account. For immediate access, use <code>manage.py login-link yourname</code>.</dd>
+      <dt>“That sign-in didn't start in this browser”</dt>
+      <dd>Open the dashboard at the address in the redirect URI (<code>http://127.0.0.1:8765</code>) and try Google sign-in again.</dd>
+      <dt>Google says <code>redirect_uri_mismatch</code></dt>
+      <dd>The redirect URI in Google Cloud must match <code>manage.py status</code> character for character.</dd>
+      <dt>The AI steps were skipped</dt>
+      <dd>No key for the selected provider. Add it to <code>.env</code> and restart. The project form warns about this before you start.</dd>
+      <dt>A custom provider doesn't work</dt>
+      <dd>Press <strong>Test connection</strong>. It shows the endpoint's own error, such as a wrong model name or an invalid key. “No … set in .env” means the key line is missing from <code>.env</code> or the dashboard hasn't been restarted since you added it.</dd>
+      <dt>The crawl is very slow</dt>
+      <dd>Check the speed setting and the pace line under the step cards. “Slowed down” means the site asked for it. Respect that, or ask the site owner to allow the crawler.</dd>
+      <dt>Everything shows as recently edited</dt>
+      <dd>The site reports the current time as every page's last edit. Outdated-wording detection and AI triage still work; only age-based staleness is affected.</dd>
+      <dt>“Address already in use” when starting</dt>
+      <dd>Another copy is running. Stop it with <code>pkill -f dashboard.py</code>, then start again.</dd>
+    </dl>
+    <p class="top"><a href="#main">Back to top</a></p>
+  </article>
+  </main>
+</div>
+</body>
+</html>

@@ -1,0 +1,3 @@
+Public Sans (U.S. General Services Administration) and Merriweather (Sorkin Type)
+are licensed under the SIL Open Font License, Version 1.1: https://openfontlicense.org
+Latin subsets, downloaded from Google Fonts and served locally.

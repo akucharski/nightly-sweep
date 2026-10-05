@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nightly Sweep · Find the pages that quietly stopped being true</title>
+<meta name="description" content="Nightly Sweep reads a public website overnight and reports the pages that are stale, out of date or contradicting each other. Read-only, polite, and built for public-sector web teams.">
+<style>
+  @font-face { font-family: "Public Sans"; src: url("/static/fonts/public-sans.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+  @font-face { font-family: "Merriweather"; src: url("/static/fonts/merriweather.woff2") format("woff2"); font-weight: 300 900; font-display: swap; }
+  :root {
+    --navy: #162e51; --navy-2: #1a4480; --navy-ink: #0d1e38;
+    --red: #b50909; --red-bright: #d83933; --gold: #ffbe2e;
+    --ink: #1b1b1b; --muted: #50565e; --rule: #dfe1e2; --paper: #ffffff; --wash: #f1f3f6; --cream: #faf7ef;
+    --focus: #2491ff;
+    --serif: "Merriweather", Georgia, "Times New Roman", serif;
+    --sans: "Public Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: 16px; }
+  @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 17px/1.6 var(--sans); }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+  a { color: var(--navy-2); }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .skip { position: absolute; left: 16px; top: -60px; background: var(--navy); color: #fff; padding: 10px 14px; z-index: 30; font-weight: 700; }
+  .skip:focus { top: 12px; }
+
+  /* the flag rule: decorative, tells you where you are without saying "government" */
+  .flagrule { height: 8px; background: repeating-linear-gradient(90deg, var(--red-bright) 0 48px, #fff 48px 64px, var(--navy) 64px 112px, #fff 112px 128px); }
+
+  /* ---------- header ---------- */
+  .masthead { border-bottom: 1px solid var(--rule); background: #fff; }
+  .masthead .wrap { display: flex; align-items: center; gap: 24px; min-height: 76px; }
+  .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--navy); margin-right: auto; }
+  .brand svg { flex: none; }
+  .brand b { font: 900 22px/1 var(--serif); letter-spacing: -.01em; display: block; }
+  .brand span { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .mainnav ul { list-style: none; display: flex; gap: 4px; margin: 0; padding: 0; }
+  .mainnav a { display: block; padding: 10px 12px; color: var(--ink); text-decoration: none; font-weight: 600; font-size: 15px; border-bottom: 3px solid transparent; }
+  .mainnav a:hover { border-bottom-color: var(--red-bright); }
+  .account { display: flex; align-items: center; gap: 10px; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 20px; font: 700 16px/1.2 var(--sans);
+         text-decoration: none; border: 2px solid transparent; border-radius: 2px; cursor: pointer; white-space: nowrap; }
+  .btn-red { background: var(--red); color: #fff; }
+  .btn-red:hover { background: #8b0a03; }
+  .btn-navy { background: var(--navy); color: #fff; }
+  .btn-navy:hover { background: var(--navy-ink); }
+  .btn-outline-light { border-color: #fff; color: #fff; }
+  .btn-outline-light:hover { background: rgba(255,255,255,.12); }
+  .menu-btn { display: none; background: none; border: 2px solid var(--navy); color: var(--navy); font: 700 15px/1 var(--sans); padding: 10px 14px; min-height: 44px; border-radius: 2px; cursor: pointer; }
+
+  /* ---------- hero ---------- */
+  .hero { background: var(--navy); color: #fff; position: relative; overflow: hidden; }
+  .hero::after { content: ""; position: absolute; inset: auto 0 0 0; height: 6px; background: var(--red-bright); }
+  .hero .wrap { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap: 56px; padding-top: 72px; padding-bottom: 88px; align-items: center; }
+  .eyebrow { font-size: 13px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); margin: 0 0 18px; display: flex; align-items: center; gap: 10px; }
+  .eyebrow::before { content: ""; width: 28px; height: 3px; background: var(--gold); }
+  h1 { font: 900 clamp(36px, 5vw, 58px)/1.08 var(--serif); margin: 0 0 22px; letter-spacing: -.015em; }
+  .hero p.lede { font-size: 20px; line-height: 1.55; color: #e3e8ef; margin: 0 0 32px; max-width: 34em; }
+  .hero .actions { display: flex; gap: 14px; flex-wrap: wrap; }
+  .hero .fine { margin-top: 22px; font-size: 14px; color: #c6d1de; }
+
+  /* the specimen: a finding printed like a memo */
+  .specimen { background: var(--cream); color: var(--ink); border: 1px solid #d9d2bd; box-shadow: 10px 10px 0 rgba(0,0,0,.25); padding: 26px 28px 24px; transform: rotate(.6deg); position: relative; margin: 0; }
+  .specimen .memo-head { display: flex; justify-content: space-between; gap: 12px; font: 600 12px/1.4 var(--mono); text-transform: uppercase; letter-spacing: .06em; color: #5a5446; border-bottom: 2px solid var(--ink); padding-bottom: 10px; margin-bottom: 16px; }
+  .specimen h2 { font: 900 20px/1.3 var(--serif); margin: 0 0 4px; }
+  .specimen .addr { font: 13px/1.4 var(--mono); color: #5a5446; overflow-wrap: anywhere; margin: 0 0 14px; }
+  .specimen blockquote { margin: 0 0 14px; padding: 10px 14px; border-left: 4px solid var(--red); background: #fff; font-size: 15px; }
+  .specimen mark { background: #ffe396; padding: 0 3px; }
+  .specimen dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0; font-size: 14px; }
+  .specimen dt { font: 600 12px/1.6 var(--mono); text-transform: uppercase; color: #5a5446; }
+  .specimen dd { margin: 0; }
+  .specimen .vs { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; margin: 4px 0 12px; font-size: 14px; }
+  .specimen .vs div { background: #fff; border: 1px solid #d9d2bd; padding: 8px 10px; }
+  .specimen .vs b { font-family: var(--mono); font-size: 12px; color: #5a5446; }
+  .stamp { position: absolute; right: 18px; top: 52px; transform: rotate(-9deg); border: 3px solid var(--red); color: var(--red); font: 900 15px/1 var(--sans); letter-spacing: .12em; padding: 7px 10px; text-transform: uppercase; background: rgba(250,247,239,.85); }
+  .specimen figcaption { margin-top: 16px; font-size: 12px; color: #5a5446; border-top: 1px dashed #c9c0a6; padding-top: 10px; }
+
+  /* ---------- evidence strip ---------- */
+  .evidence { background: var(--wash); border-bottom: 1px solid var(--rule); }
+  .evidence .wrap { padding-top: 44px; padding-bottom: 40px; }
+  .evidence ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); }
+  .evidence li { padding: 4px 24px; border-left: 1px solid #c5cbd3; }
+  .evidence li:first-child { border-left: 0; padding-left: 0; }
+  .evidence .num { display: block; font: 900 46px/1.1 var(--serif); color: var(--navy); }
+  .evidence .num small { font-size: 26px; }
+  .evidence .lbl { display: block; font-size: 15px; color: var(--ink); margin-top: 6px; }
+  .evidence p { margin: 24px 0 0; font-size: 14px; color: var(--muted); }
+
+  /* ---------- sections ---------- */
+  section.block { padding: 88px 0; border-bottom: 1px solid var(--rule); }
+  .sec-head { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 32px; margin-bottom: 44px; }
+  .sec-num { font: 700 13px/1.4 var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--red); border-top: 4px solid var(--navy); padding-top: 12px; }
+  h2.sec { font: 900 clamp(28px, 3.4vw, 40px)/1.15 var(--serif); margin: 0 0 14px; color: var(--navy); letter-spacing: -.01em; }
+  .sec-head p { margin: 0; font-size: 19px; color: var(--muted); max-width: 40em; }
+
+  .drift { display: grid; grid-template-columns: 220px minmax(0, 1fr) minmax(0, 1fr); gap: 32px; }
+  .drift .col p { margin: 0 0 16px; }
+  .drift ul { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--rule); }
+  .drift li { padding: 14px 0; border-bottom: 1px solid var(--rule); display: grid; grid-template-columns: 26px 1fr; gap: 10px; }
+  .drift li::before { content: "×"; color: var(--red); font-weight: 800; font-size: 20px; line-height: 1.2; }
+
+  .finds { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 2px solid var(--navy); }
+  .finds article { padding: 28px 28px 30px 0; border-bottom: 1px solid var(--rule); }
+  .finds article:not(:nth-child(3n+1)) { padding-left: 28px; border-left: 1px solid var(--rule); }
+  .finds .k { font: 700 13px/1 var(--mono); color: var(--red); letter-spacing: .06em; }
+  .finds h3 { font: 900 21px/1.3 var(--serif); margin: 10px 0 8px; color: var(--navy); }
+  .finds p { margin: 0; color: #2f3439; }
+  .finds .tag { display: inline-block; margin-top: 14px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 8px; background: var(--wash); color: var(--navy); }
+
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); counter-reset: s; }
+  .steps li { counter-increment: s; padding: 0 24px 0 0; position: relative; }
+  .steps li::before { content: counter(s); display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; background: var(--navy); color: #fff; font: 900 22px/1 var(--serif); position: relative; z-index: 1; }
+  .steps li::after { content: ""; position: absolute; top: 26px; left: 52px; right: 0; height: 2px; background: repeating-linear-gradient(90deg, var(--navy) 0 8px, transparent 8px 14px); }
+  .steps li:last-child::after { display: none; }
+  .steps h3 { font: 900 20px/1.3 var(--serif); margin: 18px 0 8px; color: var(--navy); }
+  .steps p { margin: 0 0 12px; color: #2f3439; font-size: 16px; }
+  .steps .ai { font-size: 13px; font-weight: 700; color: var(--muted); }
+
+  .compare { width: 100%; border-collapse: collapse; font-size: 16px; }
+  .compare-wrap { overflow-x: auto; }
+  .compare th, .compare td { text-align: left; padding: 14px 16px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  .compare thead th { font-size: 14px; letter-spacing: .06em; text-transform: uppercase; border-bottom: 3px solid var(--navy); color: var(--navy); }
+  .compare tbody th { font-weight: 700; width: 34%; }
+  .compare td.no { color: var(--muted); }
+  .compare td.yes { font-weight: 600; }
+  .compare td.yes::before { content: "✓ "; color: #00754a; font-weight: 800; }
+
+  .trust { background: var(--navy); color: #fff; }
+  .trust .sec-num { color: var(--gold); border-top-color: #fff; }
+  .trust h2.sec { color: #fff; }
+  .trust .sec-head p { color: #d4dde8; }
+  .pledges { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 56px; margin: 0; padding: 0; list-style: none; }
+  .pledges li { padding: 20px 0; border-top: 1px solid rgba(255,255,255,.22); display: grid; grid-template-columns: 34px 1fr; gap: 12px; }
+  .pledges li::before { content: "★"; color: var(--gold); font-size: 18px; line-height: 1.5; }
+  .pledges b { display: block; font: 900 18px/1.4 var(--serif); margin-bottom: 4px; }
+  .pledges span { color: #d4dde8; font-size: 16px; }
+
+  .roles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 32px; }
+  .roles article { border-top: 4px solid var(--red-bright); padding-top: 18px; }
+  .roles h3 { font: 900 19px/1.3 var(--serif); margin: 0 0 8px; color: var(--navy); }
+  .roles p { margin: 0; font-size: 16px; color: #2f3439; }
+  .roles q { display: block; margin-top: 14px; font: italic 15px/1.5 var(--serif); color: var(--muted); }
+
+  .a11y { display: grid; grid-template-columns: 220px minmax(0, 1fr) 280px; gap: 32px; align-items: start; }
+  .a11y ul { margin: 0; padding-left: 20px; }
+  .a11y li { margin: 6px 0; }
+  .seal { border: 3px double var(--navy); padding: 22px; text-align: center; color: var(--navy); }
+  .seal b { display: block; font: 900 44px/1 var(--serif); }
+  .seal span { display: block; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; font-size: 13px; margin-top: 8px; }
+  .seal small { display: block; color: var(--muted); margin-top: 10px; font-size: 13px; }
+
+  .faq { border-top: 2px solid var(--navy); }
+  .faq details { border-bottom: 1px solid var(--rule); }
+  .faq summary { cursor: pointer; padding: 20px 44px 20px 0; font: 700 19px/1.4 var(--serif); color: var(--navy); list-style: none; position: relative; }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary::after { content: "+"; position: absolute; right: 8px; top: 16px; font: 400 28px/1 var(--sans); color: var(--red); }
+  .faq details[open] summary::after { content: "–"; }
+  .faq details > div { padding: 0 0 22px; max-width: 46em; }
+  .faq details > div p { margin: 0 0 10px; }
+
+  .closing { background: var(--wash); border-top: 6px solid var(--red-bright); }
+  .closing .wrap { padding-top: 72px; padding-bottom: 72px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 32px; align-items: center; }
+  .closing h2 { font: 900 clamp(26px, 3vw, 36px)/1.2 var(--serif); color: var(--navy); margin: 0 0 10px; }
+  .closing p { margin: 0; color: var(--muted); font-size: 18px; }
+  .closing .actions { display: flex; gap: 12px; flex-wrap: wrap; }
+  .btn-outline { border-color: var(--navy); color: var(--navy); background: #fff; }
+
+  footer.site { background: var(--navy-ink); color: #cfd8e3; font-size: 15px; }
+  footer.site .wrap { padding-top: 44px; padding-bottom: 36px; display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 32px; }
+  footer.site b { color: #fff; font: 900 18px/1.3 var(--serif); display: block; margin-bottom: 8px; }
+  footer.site h2 { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--gold); margin: 0 0 10px; }
+  footer.site ul { list-style: none; margin: 0; padding: 0; }
+  footer.site li { margin: 6px 0; }
+  footer.site a { color: #fff; }
+  footer.site .builtby { grid-column: 1 / -1; display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+                         border-top: 1px solid rgba(255,255,255,.18); padding-top: 26px; }
+  footer.site .builtby img { display: block; width: 170px; height: auto; }
+  footer.site .builtby p { margin: 0; color: #fff; font-size: 16px; }
+  footer.site .legal { grid-column: 1 / -1; border-top: 1px solid rgba(255,255,255,.18); padding-top: 18px; font-size: 13px; color: #b8c4d2; }
+
+  /* ---------- small screens ---------- */
+  @media (max-width: 1000px) {
+    .hero .wrap { grid-template-columns: minmax(0, 1fr); padding-top: 48px; }
+    .specimen { transform: none; }
+    .sec-head, .drift, .a11y { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+    .drift .label, .a11y .label { display: none; }
+    .finds { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .finds article, .finds article:not(:nth-child(3n+1)) { padding: 24px 24px 24px 0; border-left: 0; }
+    .finds article:nth-child(2n) { padding-left: 24px; border-left: 1px solid var(--rule); }
+    .steps { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px 0; }
+    .steps li::after { display: none; }
+    .roles { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .evidence ul { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px 0; }
+    .evidence li:nth-child(3) { border-left: 0; padding-left: 0; }
+    .pledges { grid-template-columns: minmax(0, 1fr); }
+    .closing .wrap, footer.site .wrap { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (max-width: 860px) {
+    .menu-btn { display: inline-flex; align-items: center; }
+    .mainnav { display: none; position: absolute; left: 0; right: 0; top: 100%; background: #fff; border-bottom: 3px solid var(--navy); z-index: 20; }
+    .mainnav.open { display: block; }
+    .mainnav ul { flex-direction: column; padding: 8px 24px 16px; }
+    .mainnav a { padding: 12px 0; border-bottom: 1px solid var(--rule); }
+    .masthead { position: relative; }
+    .masthead .wrap { gap: 10px; }
+  }
+  @media (max-width: 560px) {
+    body { font-size: 16px; }
+    .wrap { padding: 0 16px; }
+    .brand span { display: none; }
+    .brand b { font-size: 19px; }
+    .finds, .steps, .roles, .evidence ul { grid-template-columns: minmax(0, 1fr); }
+    .finds article, .finds article:nth-child(2n) { padding: 22px 0; border-left: 0; }
+    .evidence li { border-left: 0; padding-left: 0; }
+    .specimen { padding: 20px 18px; box-shadow: 6px 6px 0 rgba(0,0,0,.25); }
+    .specimen .vs { grid-template-columns: minmax(0, 1fr); }
+    .stamp { top: 46px; right: 10px; font-size: 13px; }
+    section.block { padding: 60px 0; }
+    .btn { width: 100%; }
+    .account .btn { width: auto; padding: 10px 14px; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to main content</a>
+<div class="flagrule" aria-hidden="true"></div>
+
+<header class="masthead">
+  <div class="wrap">
+    <a class="brand" href="/" aria-label="Nightly Sweep home">
+      <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" fill="#162e51"/><path d="M9 11h22M9 17h22M9 23h12" stroke="#fff" stroke-width="3"/><path d="M22 27l4 4 7-9" stroke="#ffbe2e" stroke-width="3.5" fill="none"/></svg>
+      <div><b>Nightly Sweep</b><span>Website accuracy for public agencies</span></div>
+    </a>
+    <nav class="mainnav" id="mainnav" aria-label="Main">
+      <ul>
+        <li><a href="#how">How it works</a></li>
+        <li><a href="#finds">What it finds</a></li>
+        <li><a href="#trust">Security</a></li>
+        <li><a href="#accessibility">Accessibility</a></li>
+        <li><a href="#faq">FAQ</a></li>
+      </ul>
+    </nav>
+    <div class="account">
+      <button class="menu-btn" type="button" aria-expanded="false" aria-controls="mainnav" id="menuBtn">Menu</button>
+      <!--ACCOUNT-->
+    </div>
+  </div>
+</header>
+
+<main id="main" tabindex="-1">
+  <section class="hero" aria-labelledby="hero-h">
+    <div class="wrap">
+      <div>
+        <p class="eyebrow">For government and public-sector web teams</p>
+        <h1 id="hero-h">Find the pages that quietly stopped being true.</h1>
+        <p class="lede">Nightly Sweep reads your public website overnight and tells you which pages are stale, which describe deadlines that have passed, and which contradict each other. Then a person decides what to fix. It never changes a thing.</p>
+        <div class="actions">
+          <a class="btn btn-red" href="/login">Sign in to the dashboard</a>
+          <a class="btn btn-outline-light" href="#how">See how it works</a>
+        </div>
+        <p class="fine">Runs on your own computer. Read-only. No change to your content system required.</p>
+      </div>
+
+      <figure class="specimen" aria-labelledby="spec-cap">
+        <div class="memo-head"><span>Finding 014 · Parks &amp; Recreation</span><span>Sweep of Oct 4</span></div>
+        <div class="stamp" aria-hidden="true">Review</div>
+        <h2>Summer Camp Registration</h2>
+        <p class="addr">/parks/summer-camp</p>
+        <blockquote>“Registration for summer camp closes <mark>May 15, 2024</mark>. Join us at Riverside Park…”</blockquote>
+        <dl>
+          <dt>Signal</dt><dd>Past date written as upcoming</dd>
+          <dt>Last edit</dt><dd>2.6 years ago</dd>
+          <dt>Verdict</dt><dd><strong>Dead</strong>: describes a deadline that has passed</dd>
+        </dl>
+        <hr style="border:0;border-top:1px dashed #c9c0a6;margin:16px 0 12px">
+        <dl><dt>Also found</dt><dd>Contradiction · <strong>high</strong> · building permit fee</dd></dl>
+        <div class="vs">
+          <div><b>/permits/building</b><br>“The application fee is $75”</div>
+          <span aria-hidden="true">vs</span><span class="sr-only">versus</span>
+          <div><b>/permits/fees</b><br>“The application fee is $50”</div>
+        </div>
+        <figcaption id="spec-cap">An example finding as it appears in a Nightly Sweep report. Every quote is checked word for word against the live page.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="evidence" aria-labelledby="ev-h">
+    <div class="wrap">
+      <h2 id="ev-h" class="sr-only">What one overnight sweep found</h2>
+      <ul>
+        <li><span class="num">82<small>%</small></span><span class="lbl">of pages not edited in 18 months or more</span></li>
+        <li><span class="num">31</span><span class="lbl">pages still advertising dates that had passed</span></li>
+        <li><span class="num">5</span><span class="lbl">places where the site contradicted itself</span></li>
+        <li><span class="num">0</span><span class="lbl">changes made to the website</span></li>
+      </ul>
+      <p>From a single overnight sweep of a 200-page municipal website, October 2026.</p>
+    </div>
+  </section>
+
+  <section class="block" aria-labelledby="drift-h">
+    <div class="wrap drift">
+      <div class="label sec-num" aria-hidden="true">The problem</div>
+      <div class="col">
+        <h2 class="sec" id="drift-h">Websites don’t break. They drift.</h2>
+        <p>A link checker will tell you when a page is gone. It can’t tell you when a page is still there but no longer true: the grant that closed two springs ago, the office that moved, the fee that changed on one page and not the other.</p>
+        <p>Residents find those pages before staff do. They show up at the wrong address, pay the wrong amount, or miss a deadline that was never updated, and the call comes to your front desk.</p>
+      </div>
+      <div class="col">
+        <ul aria-label="Common examples">
+          <li>Applications “open now” for a programme that ended</li>
+          <li>Events from last year presented as upcoming</li>
+          <li>Two different phone numbers for the same office</li>
+          <li>A fee schedule that disagrees with the permit page</li>
+          <li>Links to forms and PDFs that no longer exist</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="finds" aria-labelledby="finds-h">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="sec-num">01 · What it finds</div>
+        <div>
+          <h2 class="sec" id="finds-h">Six kinds of problem, in one report</h2>
+          <p>Four checks are mechanical, free and certain. Two use AI judgement, and every claim comes with the exact words from the page.</p>
+        </div>
+      </div>
+      <div class="finds">
+        <article><span class="k">A</span><h3>Stale pages</h3><p>Pages not edited in longer than you set (18 months by default), grouped by section so you know which department to call.</p><span class="tag">No AI</span></article>
+        <article><span class="k">B</span><h3>Outdated wording</h3><p>Past dates still written as if they’re ahead: “registration closes,” “will be held,” “apply by.” It catches pages that look freshly edited but aren’t current.</p><span class="tag">No AI</span></article>
+        <article><span class="k">C</span><h3>Contradictions</h3><p>Related pages are compared side by side for conflicting fees, deadlines, hours, phone numbers, addresses and rules.</p><span class="tag">AI, quotes verified</span></article>
+        <article><span class="k">D</span><h3>Dead pages</h3><p>Addresses that return “not found” or “forbidden,” with every page that still links to them.</p><span class="tag">No AI</span></article>
+        <article><span class="k">E</span><h3>Broken links</h3><p>Links on your pages that lead to an error, on your site or anyone else’s.</p><span class="tag">No AI</span></article>
+        <article><span class="k">F</span><h3>Pages that have ended</h3><p>For each flagged page, a verdict of live, dead or unclear. Age alone is never treated as a problem; a 1998 charter can be perfectly current.</p><span class="tag">AI, evidence quoted</span></article>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="how" aria-labelledby="how-h" style="background:var(--wash)">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="sec-num">02 · How it works</div>
+        <div>
+          <h2 class="sec" id="how-h">Overnight, unattended, and gentle on your server</h2>
+          <p>Set up a project once. Each run is saved, so you can open any past sweep and watch the numbers fall.</p>
+        </div>
+      </div>
+      <ol class="steps">
+        <li><h3>Read politely</h3><p>Fetches pages one at a time at a human pace, obeys robots.txt, and slows down on its own if your server asks.</p><span class="ai">Uses AI: no</span></li>
+        <li><h3>Flag the suspects</h3><p>Measures page age and finds passed dates, dead pages, broken links and expired events. Usually a small share of the site.</p><span class="ai">Uses AI: no</span></li>
+        <li><h3>Judge what matters</h3><p>Only flagged pages go to the model. Pages unchanged since the last run keep their earlier verdict, so repeat runs cost little.</p><span class="ai">Uses AI: yes, your choice of model</span></li>
+        <li><h3>Hand it to a person</h3><p>A dashboard with charts and filters, plus a digest that can be emailed each morning and exported to a spreadsheet.</p><span class="ai">Uses AI: no</span></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="block" aria-labelledby="cmp-h">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="sec-num">03 · The difference</div>
+        <div>
+          <h2 class="sec" id="cmp-h">More than a link checker</h2>
+          <p>A crawler knows a page hasn’t changed since 2019. It can’t know whether that matters.</p>
+        </div>
+      </div>
+      <div class="compare-wrap" tabindex="0" role="region" aria-labelledby="cmp-cap">
+        <table class="compare">
+          <caption id="cmp-cap" class="sr-only">What a typical link checker covers compared with Nightly Sweep</caption>
+          <thead><tr><th scope="col">Question</th><th scope="col">Typical link checker</th><th scope="col">Nightly Sweep</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Is this link broken?</th><td class="yes">Yes</td><td class="yes">Yes, with every page that links to it</td></tr>
+            <tr><th scope="row">When was this page last edited?</th><td class="no">Sometimes</td><td class="yes">Yes, charted by section</td></tr>
+            <tr><th scope="row">Does this page describe something that has ended?</th><td class="no">No</td><td class="yes">Yes, with the sentence that proves it</td></tr>
+            <tr><th scope="row">Do two pages disagree about a fee or a phone number?</th><td class="no">No</td><td class="yes">Yes, quotes shown side by side</td></tr>
+            <tr><th scope="row">Is it safe to run against production?</th><td class="no">Varies</td><td class="yes">Read-only, paced, and backs off automatically</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="block trust" id="trust" aria-labelledby="trust-h">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="sec-num">04 · Security and trust</div>
+        <div>
+          <h2 class="sec" id="trust-h">Built to be approved without a meeting</h2>
+          <p>Write access is closed by design. That is the reason IT can say yes.</p>
+        </div>
+      </div>
+      <ul class="pledges">
+        <li><div><b>Read-only, always</b><span>It reads public pages the way any visitor does. It can’t submit a form, sign in to your site, or change a character.</span></div></li>
+        <li><div><b>Honest about who it is</b><span>Every request names the crawler, so your web team can see exactly who visited. It doesn’t pretend to be a person’s browser.</span></div></li>
+        <li><div><b>Polite by default</b><span>One request at a time, with random gaps. robots.txt and Crawl-delay are respected, and the crawler halves its speed when your server pushes back.</span></div></li>
+        <li><div><b>Runs on your machine</b><span>Projects, results and accounts stay on your computer. Only public page text goes to the AI model, and you can run a local model so nothing leaves at all.</span></div></li>
+        <li><div><b>Claims you can check</b><span>Every contradiction quotes both pages word for word, and any claim whose quote can’t be found is thrown out before you see it.</span></div></li>
+        <li><div><b>Proper sign-in</b><span>Passwords are stored only as scrypt hashes, Google Workspace sign-in is supported, and an administrator can reset access from the command line.</span></div></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="block" aria-labelledby="roles-h">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="sec-num">05 · Who it’s for</div>
+        <div>
+          <h2 class="sec" id="roles-h">One report, four teams</h2>
+          <p>Each team gets the part of the report it acts on.</p>
+        </div>
+      </div>
+      <div class="roles">
+        <article><h3>Web managers</h3><p>A ranked list of what to fix, by section, with the evidence attached. Trends show the backlog shrinking.</p><q>Which twenty pages should we fix this week?</q></article>
+        <article><h3>Communications</h3><p>Catch the contradictions and expired announcements before a resident, reporter or council member does.</p><q>Are we telling people two different things?</q></article>
+        <article><h3>Department content owners</h3><p>Their own section, their own stale pages, and a plain-language reason for each one.</p><q>What on our pages is out of date?</q></article>
+        <article><h3>IT and security</h3><p>Read-only, locally hosted, paced, and honest about its identity. It is easy to review and easy to approve.</p><q>Will this touch production?</q></article>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="accessibility" aria-labelledby="a11y-h" style="background:var(--wash)">
+    <div class="wrap a11y">
+      <div class="label sec-num" aria-hidden="true">06 · Accessibility</div>
+      <div>
+        <h2 class="sec" id="a11y-h">Usable by everyone on your team</h2>
+        <p>The dashboard is built to WCAG 2.2 level AA, which includes all of WCAG 2.1 AA, the level required of public-sector web content under ADA Title II.</p>
+        <ul>
+          <li>Full keyboard operation, visible focus, and a skip link on every page</li>
+          <li>Every chart has a written description and a table view</li>
+          <li>Progress and errors announced to screen readers</li>
+          <li>Contrast checked in light and dark mode; works at phone width</li>
+          <li>Sign-in works with password managers and Google, with no puzzles</li>
+        </ul>
+      </div>
+      <div class="seal" role="img" aria-label="Built to WCAG 2.2 AA">
+        <b>2.2 AA</b><span>WCAG target</span><small>Checked with automated testing (axe-core) in light and dark mode</small>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="faq" aria-labelledby="faq-h">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="sec-num">07 · Questions</div>
+        <div><h2 class="sec" id="faq-h">Frequently asked questions</h2></div>
+      </div>
+      <div class="faq">
+        <details><summary>Will it change anything on our website?</summary><div><p>No. It only reads public pages over the same connection any visitor uses. It has no access to your content management system and no way to write to the site.</p></div></details>
+        <details><summary>Will our server or firewall block it?</summary><div><p>It is designed not to look like an attack: one request at a time with human-like gaps, respect for robots.txt, and automatic slow-downs when the server asks. If a firewall still blocks it, allow the <code>NightlySweep</code> user agent. The crawler announces itself honestly, so that’s a one-line rule.</p></div></details>
+        <details><summary>Do we need an AI subscription?</summary><div><p>No. Stale pages, outdated wording, dead pages and broken links need no AI at all. For the judgement steps you can use Anthropic (Claude), xAI (Grok), any OpenAI-compatible service, or a model running locally on your own computer.</p></div></details>
+        <details><summary>What gets sent to the AI model?</summary><div><p>Only the text of public pages that were flagged, or that are being compared for contradictions. No credentials, no private data, and nothing from your content system. With a local model, nothing leaves your computer.</p></div></details>
+        <details><summary>How long does a sweep take?</summary><div><p>About 11 minutes for 200 pages at the default polite pace, or 35 minutes at the gentlest human pace, plus link checks. It is meant to run overnight while nobody is waiting.</p></div></details>
+        <details><summary>How do we share results with departments?</summary><div><p>Export any report as a spreadsheet or JSON, email the daily digest, or publish a read-only snapshot of a run, with charts and filters, to a private web address.</p></div></details>
+        <details><summary>Who can see the dashboard?</summary><div><p>Only people with an account. Accounts are created by an administrator, or automatically for staff in your Google Workspace domain if you turn that on.</p></div></details>
+      </div>
+    </div>
+  </section>
+
+  <section class="closing" aria-labelledby="close-h">
+    <div class="wrap">
+      <div>
+        <h2 id="close-h">Know what’s out of date before your residents do.</h2>
+        <p>Run your first sweep tonight. Read the report with your coffee.</p>
+      </div>
+      <div class="actions">
+        <a class="btn btn-red" href="/login">Sign in</a>
+        <a class="btn btn-outline" href="/docs">Read the documentation</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <div><b>Nightly Sweep</b><p style="margin:0">Overnight accuracy checks for public websites. Read-only by design.</p></div>
+    <nav aria-labelledby="f-product"><h2 id="f-product">Product</h2><ul><li><a href="#how">How it works</a></li><li><a href="#finds">What it finds</a></li><li><a href="#trust">Security</a></li><li><a href="#accessibility">Accessibility</a></li></ul></nav>
+    <nav aria-labelledby="f-use"><h2 id="f-use">Use it</h2><ul><li><a href="/login">Sign in</a></li><li><a href="/docs">Documentation</a></li><li><a href="#faq">FAQ</a></li></ul></nav>
+    <div class="builtby">
+      <a href="https://www.prometsource.com"><img src="/static/promet-logo.svg" width="191" height="45" alt="Promet Source"></a>
+      <p>Built and maintained by the Promet Source team. <a href="https://www.prometsource.com">www.prometsource.com</a></p>
+    </div>
+    <p class="legal">Nightly Sweep is an independent product. It is not affiliated with, or endorsed by, the U.S. government or any government agency. Example figures come from a real sweep, with identifying details removed.</p>
+  </div>
+</footer>
+
+<script>
+  // Mobile menu: a plain disclosure button.
+  const btn = document.getElementById("menuBtn"), nav = document.getElementById("mainnav");
+  btn.addEventListener("click", () => {
+    const open = btn.getAttribute("aria-expanded") !== "true";
+    btn.setAttribute("aria-expanded", String(open));
+    nav.classList.toggle("open", open);
+  });
+  nav.addEventListener("click", e => { if (e.target.closest("a")) { btn.setAttribute("aria-expanded", "false"); nav.classList.remove("open"); } });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && nav.classList.contains("open")) { btn.setAttribute("aria-expanded", "false"); nav.classList.remove("open"); btn.focus(); } });
+</script>
+</body>
+</html>
