@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My API keys · Nightly Sweep</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #1b1f24; --muted: #5c6570; --line: #e3e6ea; --field: #7d8590;
+    --accent: #2158b8; --accent-bg: #e7effc; --btn: #2563c9; --focus: #2563c9;
+    --ok: #1a7340; --ok-bg: #e6f4ec; --warn: #8a5a10; --warn-bg: #fbf1e0; --bad: #a8291f; --bad-bg: #fbe7e5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1216; --panel: #171b21; --ink: #e6e9ed; --muted: #9da5ae; --line: #262c34; --field: #6e7681;
+      --accent: #8ab4ff; --accent-bg: #172440; --focus: #8ab4ff;
+      --ok: #4cc283; --ok-bg: #15291e; --warn: #e0a84a; --warn-bg: #2e2414; --bad: #f0716a; --bad-bg: #331a19;
+    }
+  }
+  * { box-sizing: border-box; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .skip { position: absolute; left: 16px; top: -60px; background: var(--btn); color: #fff; padding: 10px 14px; border-radius: 6px; z-index: 20; font-weight: 600; }
+  .skip:focus { top: 8px; }
+  .topnav { background: var(--panel); border-bottom: 1px solid var(--line); }
+  .topnav .in { max-width: 1240px; margin: 0 auto; padding: 8px 16px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .topnav nav { display: flex; gap: 4px; flex-wrap: wrap; }
+  .topnav nav a { color: var(--ink); text-decoration: none; padding: 8px 12px; border-radius: 6px; font-weight: 600; font-size: 14px; }
+  .topnav nav a:hover { background: var(--bg); }
+  .topnav nav a[aria-current="page"] { background: var(--accent-bg); color: var(--accent); }
+  .topnav form { margin: 0 0 0 auto; }
+  button, .btn { font: inherit; font-weight: 600; border-radius: 6px; padding: 8px 14px; cursor: pointer; min-height: 36px; }
+  .primary { background: var(--btn); color: #fff; border: 0; }
+  .secondary { background: var(--bg); color: var(--ink); border: 1px solid var(--field); }
+  .danger { background: transparent; color: var(--bad); border: 1px solid var(--field); }
+  .small { font-size: 12px; font-weight: 500; padding: 5px 10px; min-height: 28px; background: var(--bg); color: var(--ink); border: 1px solid var(--field); }
+  main { max-width: 880px; margin: 0 auto; padding: 24px 16px 60px; }
+  h1 { font-size: 24px; margin: 8px 0 6px; }
+  .lede { color: var(--muted); margin: 0 0 20px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; margin-bottom: 16px; }
+  .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 12px; }
+  .row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 10px 14px; align-items: center; padding: 14px 0; border-top: 1px solid var(--line); }
+  .row:first-of-type { border-top: 0; }
+  .row .name b { display: block; }
+  .row .name code { font-size: 12px; color: var(--muted); }
+  .status { font-size: 13px; }
+  .status.set { color: var(--ok); }
+  .status.unset { color: var(--muted); }
+  .status.broken { color: var(--bad); }
+  .row form { display: flex; gap: 8px; }
+  .row .actions { display: flex; gap: 8px; justify-content: flex-end; }
+  input { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--field); border-radius: 6px; padding: 7px 9px; min-width: 0; width: 100%; }
+  label.stack { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  .other { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 10px 14px; align-items: end; }
+  .msg { border-radius: 8px; padding: 10px 12px; font-size: 14px; margin-bottom: 16px; }
+  .msg.good { background: var(--ok-bg); color: var(--ok); border: 1px solid var(--ok); }
+  .msg.bad { background: var(--bad-bg); color: var(--bad); border: 1px solid var(--bad); }
+  .msg.warn { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn); }
+  .hidden { display: none !important; }
+  ul.facts { margin: 0; padding-left: 20px; }
+  ul.facts li { margin: 6px 0; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  @media (max-width: 680px) {
+    .row, .other { grid-template-columns: minmax(0, 1fr); }
+    .row .actions { justify-content: flex-start; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to main content</a>
+<header class="topnav">
+  <div class="in">
+    <nav aria-label="Main">
+      <a href="/dashboard">Dashboard</a>
+      <a href="/docs">Documents</a>
+      <a href="/account" aria-current="page">My API keys</a>
+    </nav>
+    <form method="post" action="/logout"><button class="small" type="submit">Sign out</button></form>
+  </div>
+</header>
+
+<main id="main" tabindex="-1">
+  <h1>My API keys</h1>
+  <p class="lede" id="who">Your own keys for the AI services. Sweeps you start use them; nobody else's sweeps can.</p>
+  <div id="flash" role="status" aria-live="polite"></div>
+
+  <section class="panel" aria-labelledby="known-h">
+    <h2 id="known-h">AI services</h2>
+    <div id="known"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="other-h">
+    <h2 id="other-h">Another service</h2>
+    <p class="lede" style="margin-bottom:12px">For a custom endpoint in a project's settings. Give the key a name ending in <code>_API_KEY</code> or <code>_TOKEN</code>, then pick that name in the project.</p>
+    <form class="other" id="otherForm" autocomplete="off">
+      <label class="stack" for="otherName">Key name <input id="otherName" name="name" placeholder="MYSERVICE_API_KEY" spellcheck="false" autocapitalize="characters" required></label>
+      <label class="stack" for="otherValue">Key <input id="otherValue" name="value" type="password" autocomplete="off" required></label>
+      <button class="primary" type="submit">Save key</button>
+    </form>
+    <div id="others"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="how-h">
+    <h2 id="how-h">How your keys are kept</h2>
+    <ul class="facts">
+      <li>Each key is encrypted (AES-256-GCM) before it's saved, and sealed to your account and its name.</li>
+      <li>After saving, a key is never shown again, not even to you. You'll see only its last four characters.</li>
+      <li>Keys are used only for sweeps, model lists and connection tests that you start, and are sent only to the service they belong to.</li>
+      <li>Administrators can't read your keys from the dashboard. Remove a key here at any time; removing your account removes them all.</li>
+    </ul>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let state = { keys: {}, known: [], unreadable: [] };
+
+async function call(url, body) {
+  const r = await fetch(url, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
+  if (r.status === 401) { location.href = "/login?next=/account"; return new Promise(() => {}); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+function flash(kind, text) {
+  $("flash").innerHTML = text ? `<div class="msg ${kind}">${esc(text)}</div>` : "";
+}
+function when(t) { return t ? new Date(t * 1000).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }) : ""; }
+function statusOf(name) {
+  const k = state.keys[name];
+  if (!k) return `<span class="status unset">Not set</span>`;
+  if (state.unreadable.includes(name)) return `<span class="status broken">Saved, but can't be read. Save it again.</span>`;
+  return `<span class="status set">Saved${k.hint ? `, ends in …${esc(k.hint)}` : ""}${k.updated ? ` · ${when(k.updated)}` : ""}</span>`;
+}
+
+function render() {
+  $("known").innerHTML = state.known.map(({ name, label }, i) => `
+    <div class="row">
+      <div class="name"><b>${esc(label)}</b><code>${esc(name)}</code><div>${statusOf(name)}</div></div>
+      <form data-name="${esc(name)}" autocomplete="off">
+        <label class="sr-only" for="k${i}">${esc(label)} key</label>
+        <input id="k${i}" type="password" autocomplete="off" placeholder="${state.keys[name] ? "Paste a new key to replace it" : "Paste your key"}" required>
+        <button class="secondary" type="submit">Save<span class="sr-only"> ${esc(label)} key</span></button>
+      </form>
+      <div class="actions">${state.keys[name] ? `<button class="danger" type="button" data-remove="${esc(name)}">Remove<span class="sr-only"> ${esc(label)} key</span></button>` : ""}</div>
+    </div>`).join("");
+  const knownNames = state.known.map(k => k.name);
+  const others = Object.keys(state.keys).filter(n => !knownNames.includes(n)).sort();
+  $("others").innerHTML = others.length ? `<div style="margin-top:14px">${others.map(n => `
+    <div class="row"><div class="name"><b>${esc(n)}</b><div>${statusOf(n)}</div></div><div></div>
+      <div class="actions"><button class="danger" type="button" data-remove="${esc(n)}">Remove<span class="sr-only"> ${esc(n)}</span></button></div></div>`).join("")}</div>` : "";
+}
+
+async function load() {
+  state = await call("/api/keys");
+  render();
+}
+
+document.addEventListener("submit", async e => {
+  const f = e.target;
+  if (f.id === "otherForm") {
+    e.preventDefault();
+    try {
+      const name = $("otherName").value.trim().toUpperCase();
+      await call("/api/keys", { name, value: $("otherValue").value });
+      $("otherName").value = ""; $("otherValue").value = "";
+      await load(); flash("good", `${name} saved and encrypted.`);
+    } catch (err) { flash("bad", err.message); }
+    return;
+  }
+  if (f.dataset.name) {
+    e.preventDefault();
+    const input = f.querySelector("input"), name = f.dataset.name;
+    try {
+      await call("/api/keys", { name, value: input.value });
+      input.value = "";
+      await load();
+      flash("good", `${state.known.find(k => k.name === name).label} key saved and encrypted. Use Test connection in a project to check it works.`);
+    } catch (err) { flash("bad", err.message); }
+  }
+});
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-remove]"); if (!b) return;
+  const name = b.dataset.remove, label = (state.known.find(k => k.name === name) || {}).label || name;
+  if (!confirm(`Remove your ${label} key? Sweeps you start won't be able to use ${label} until you add it again.`)) return;
+  try { await call("/api/keys/delete", { name }); await load(); flash("good", `${label} key removed.`); }
+  catch (err) { flash("bad", err.message); }
+});
+
+(async () => {
+  try {
+    const me = await call("/api/me");
+    $("who").textContent = `Keys for ${me.name}. Sweeps you start use them; nobody else's sweeps can.`;
+    await load();
+    if (state.unreadable.length) flash("warn", "Some saved keys can't be read, probably because the server's encryption setting changed. Save them again.");
+  } catch (err) { flash("bad", err.message); }
+})();
+</script>
+</body>
+</html>

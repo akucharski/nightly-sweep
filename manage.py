@@ -25,7 +25,8 @@ import time
 from datetime import datetime
 
 import auth
-import triage  # noqa: F401  (loads .env, for the Google settings shown by `status`)
+import triage  # loads .env, for the Google settings shown by `status`
+import vault
 
 DEFAULT_URL = os.environ.get("PUBLIC_URL", "").rstrip("/") or "http://127.0.0.1:8765"
 
@@ -110,7 +111,8 @@ def cmd_remove(a):
     del users[name]
     auth.save_users(users)
     auth.end_sessions(name)
-    print(f"Removed {name}.")
+    vault.delete_user(name)
+    print(f"Removed {name} and their saved API keys.")
 
 
 def cmd_link(a):
@@ -122,6 +124,41 @@ def cmd_link(a):
     print(f"One-time sign-in link for {name}, valid {a.minutes} minutes:\n\n"
           f"  {a.url.rstrip('/')}/auth/link?token={token}\n\n"
           "It works once. Don't paste it anywhere it could be read by someone else.")
+
+
+def cmd_keys(a):
+    """Names and hints only. This tool never prints a key."""
+    name, _ = get_user(auth.load_users(), a.username)
+    if a.action == "list":
+        keys = vault.list_keys(name)
+        if not keys:
+            print(f"{name} has no saved API keys.")
+        for k, info in sorted(keys.items()):
+            print(f"  {k:24} ends in …{info['hint'] or '????'}")
+        for k in vault.unreadable(name):
+            print(f"  {k:24} can't be read (the encryption key changed); save it again")
+    elif a.action == "remove":
+        if not a.key_name:
+            fail("say which key, e.g.: manage.py keys remove andy GEMINI_API_KEY")
+        print("Removed." if vault.delete_key(name, a.key_name.upper()) else "No such key.")
+    elif a.action == "import":
+        allowed = {n for n, _ in dashboard_known_keys()}
+        found = {}
+        for line in open(a.env_file):
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, _, v = line.removeprefix("export ").partition("=")
+                k, v = k.strip(), v.strip().strip("'\"")
+                if v and (k in allowed or not triage.custom_key_problem(k)) and k.endswith(("_API_KEY", "_TOKEN")):
+                    found[k] = v
+        for k, v in found.items():
+            vault.set_key(name, k, v)
+        print(f"Encrypted and saved {len(found)} key(s) for {name}: {', '.join(sorted(found)) or 'none found'}")
+
+
+def dashboard_known_keys():
+    out = [(triage.PROVIDERS["anthropic"]["key_env"], "Anthropic"), (triage.PROVIDERS["xai"]["key_env"], "xAI")]
+    return out + [(c["key_env"], c["label"]) for c in triage.COMPATIBLE.values() if c["key_env"]]
 
 
 def cmd_sign_out(a):
@@ -186,7 +223,7 @@ def main():
 
     p = sub.add_parser("remove-user", help="delete an account")
     p.add_argument("username")
-    p.add_argument("--yes", action="store_true", help="don't ask to confirm")
+    p.add_argument("--yes", action="store_true", help="don't ask to confirm (also removes their API keys)")
     p.set_defaults(fn=cmd_remove)
 
     p = sub.add_parser("login-link", help="print a one-time sign-in link (admin override)")
@@ -198,6 +235,13 @@ def main():
     p = sub.add_parser("sign-out", help="end sessions for one user, or everyone")
     p.add_argument("username", nargs="?")
     p.set_defaults(fn=cmd_sign_out)
+
+    p = sub.add_parser("keys", help="a user's saved API keys: list, remove, or import from a .env file")
+    p.add_argument("action", choices=["list", "remove", "import"])
+    p.add_argument("username")
+    p.add_argument("key_name", nargs="?", help="for remove: e.g. GEMINI_API_KEY")
+    p.add_argument("--env-file", default=".env", help="for import (default .env)")
+    p.set_defaults(fn=cmd_keys)
 
     sub.add_parser("list", help="show accounts").set_defaults(fn=cmd_list)
     sub.add_parser("status", help="show sign-in settings").set_defaults(fn=cmd_status)

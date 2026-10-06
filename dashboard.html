@@ -208,6 +208,7 @@
     <nav aria-label="Main">
       <a href="/dashboard" aria-current="page">Dashboard</a>
       <a href="/docs">Documents</a>
+      <a href="/account">My API keys</a>
     </nav>
     <span class="who" id="who"></span>
     <form method="post" action="/logout"><button class="small" type="submit">Sign out</button></form>
@@ -242,11 +243,11 @@
       <label class="c2 custom-only">Endpoint URL <input name="custom_url" type="url" placeholder="https://api.example.com/v1" spellcheck="false" aria-describedby="customHelp"></label>
       <label class="c2 compat-ai">Model <input name="custom_model" list="modelList" placeholder="choose or type a model" spellcheck="false" autocapitalize="none" autocomplete="off"></label>
       <datalist id="modelList"></datalist>
-      <label class="custom-only">API key from .env <select name="custom_key_env" id="keySel" aria-describedby="customHelp"></select></label>
+      <label class="custom-only">Your API key <select name="custom_key_env" id="keySel" aria-describedby="customHelp"></select></label>
       <div class="compat-ai test-ai"><button type="button" class="secondary" id="loadModels">Load models</button></div>
       <div class="compat-ai test-ai"><button type="button" class="secondary" id="testAi">Test connection</button></div>
       <div class="note c6 preset-only" id="keyStatus"></div>
-      <div class="note c6 custom-only" id="customHelp">Any other endpoint that speaks the OpenAI chat format. Put its key in .env (for example MYSERVICE_API_KEY=…), restart the dashboard, and pick it here. Choose “None” for local models.</div>
+      <div class="note c6 custom-only" id="customHelp">Any other endpoint that speaks the OpenAI chat format. Save its key under <a href="/account">My API keys</a> with a name such as MYSERVICE_API_KEY, then pick it here. Choose “None” for local models.</div>
       <div class="note c6 compat-ai" id="testResult" role="status"></div>
       <div class="checks c6">
         <label><input type="checkbox" name="link_check"> Check links</label>
@@ -378,7 +379,7 @@ const STAGES = [
   ["digest", "Digest", "write report"],
 ];
 const SEV = ["high", "medium", "low"];
-let projects = [], profiles = {}, keys = {}, envKeys = [], models = {}, compatible = {};
+let projects = [], profiles = {}, keys = {}, envKeys = [], savedKeys = [], models = {}, compatible = {};
 let pid = null, view = null, result = null, live = null;
 let since = 0, invCache = { run: null, data: [] }, logKey = null, savedHandled = null;
 let mainTab = ["stale", "contra", "all"].find(t => location.hash === "#" + t) || store.get("sweep.tab") || "stale", subFilter = "all", open = new Set();
@@ -447,7 +448,7 @@ function formData() {
 
 function renderKeySelect(current) {
   const opts = [`<option value="">None (local model, no key)</option>`, ...envKeys.map(k => `<option value="${esc(k)}">${esc(k)}</option>`)];
-  if (current && !envKeys.includes(current)) opts.push(`<option value="${esc(current)}">${esc(current)} (not in .env)</option>`);
+  if (current && !envKeys.includes(current)) opts.push(`<option value="${esc(current)}">${esc(current)} (not saved)</option>`);
   $("keySel").innerHTML = opts.join("");
   $("keySel").value = current;
 }
@@ -469,16 +470,16 @@ function renderNote() {
   show(".custom-only", isCustom); show(".preset-only", !!preset); show(".compat-ai", isCustom || !!preset);
   if (preset) {
     $("keyStatus").textContent = !preset.key_env ? `${preset.label} runs on this computer and needs no key. Make sure it's running before you sweep.`
-      : envKeys.includes(preset.key_env) ? `Uses ${preset.key_env} from .env (found).` : `Add ${preset.key_env}=your-key to .env, then restart the dashboard.`;
+      : savedKeys.includes(preset.key_env) ? `Uses your ${preset.label} key (saved under My API keys).` : `Add your ${preset.label} key under My API keys to use it.`;
   }
   let needKey = "";
   if (f.ai.checked || f.contradictions.checked) {
     const keyVar = f.custom_key_env.value, model = f.custom_model.value.trim();
     if ((isCustom || preset) && !model) needKey = "Choose a model (Load models lists them), or the AI steps will be skipped.";
-    else if (preset && preset.key_env && !envKeys.includes(preset.key_env)) needKey = `No ${preset.key_env} in .env, so the AI steps will be skipped.`;
+    else if (preset && preset.key_env && !savedKeys.includes(preset.key_env)) needKey = `No ${preset.label} key saved under My API keys, so the AI steps will be skipped.`;
     else if (isCustom && !f.custom_url.value.trim()) needKey = "Enter the endpoint URL, or the AI steps will be skipped.";
-    else if (isCustom && keyVar && !envKeys.includes(keyVar)) needKey = `No ${keyVar} in .env, so the AI steps will be skipped.`;
-    else if (!isCustom && !preset && !keys[prov]) needKey = `No ${prov === "xai" ? "XAI_API_KEY" : "ANTHROPIC_API_KEY"} in .env, so the AI steps will be skipped.`;
+    else if (isCustom && keyVar && !envKeys.includes(keyVar)) needKey = `No ${keyVar} saved under My API keys, so the AI steps will be skipped.`;
+    else if (!isCustom && !preset && !keys[prov]) needKey = `No ${prov === "xai" ? "xAI" : "Anthropic"} key saved under My API keys, so the AI steps will be skipped.`;
   }
   if (prov !== "custom" && models[prov]) msgs.push(`AI model: ${models[prov]}.`);
   if (needKey) msgs.push(needKey);
@@ -488,7 +489,7 @@ function renderNote() {
 
 async function loadProjects() {
   const d = await api.get("/api/projects");
-  projects = d.projects; profiles = d.profiles; keys = d.keys; envKeys = d.env_keys || []; models = d.models || {};
+  projects = d.projects; profiles = d.profiles; keys = d.keys; envKeys = d.env_keys || []; savedKeys = d.saved_keys || []; models = d.models || {};
   compatible = d.compatible || {};
   const ps = $("providerSel"), cur = ps.value;
   ps.innerHTML = `<optgroup label="Built in"><option value="anthropic">Anthropic</option><option value="xai">xAI (Grok)</option></optgroup>` +

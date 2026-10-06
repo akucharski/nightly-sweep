@@ -161,7 +161,7 @@ def compatible_provider(name, model):
 def list_models(provider):
     """Model ids the service offers for chat, best effort. Raises requests errors."""
     cfg = resolve(provider)
-    key = os.environ.get(cfg["key_env"]) if cfg["key_env"] else None
+    key = provider_key(cfg)
     base = cfg["url"].removesuffix("/chat/completions")
     headers = {"Authorization": f"Bearer {key}"} if key else {}
     r = requests.get(base + "/models", headers=headers, timeout=20)
@@ -180,13 +180,23 @@ def resolve(provider):
     return {"name": provider, **PROVIDERS[provider], "style": style}
 
 
+def provider_key(cfg):
+    """The API key for a request. The dashboard passes the signed-in user's own key in
+    cfg["api_key"]; the command-line scripts read it from .env or the environment."""
+    if "api_key" in cfg:
+        return cfg["api_key"] or None
+    if not cfg["key_env"]:
+        return None
+    if cfg["name"] not in PROVIDERS and cfg["key_env"] not in ENV_FILE_KEYS:
+        # Only keys put in .env on purpose, never whatever the shell happens to hold.
+        sys.exit(f"Add {cfg['key_env']} to the .env file before running.")
+    return os.environ.get(cfg["key_env"])
+
+
 def chat(provider, system, prompt, timeout=120):
     """Send one system + user message and return the reply text."""
     cfg = resolve(provider)
-    if cfg["name"] not in PROVIDERS and cfg["key_env"] and cfg["key_env"] not in ENV_FILE_KEYS:
-        # Only keys put in .env on purpose, never whatever the shell happens to hold.
-        sys.exit(f"Add {cfg['key_env']} to the .env file and restart the dashboard.")
-    key = os.environ.get(cfg["key_env"]) if cfg["key_env"] else None
+    key = provider_key(cfg)
     if cfg["key_env"] and not key:
         sys.exit(f"Set {cfg['key_env']} in .env or the environment before running.")
     timeout = cfg.get("timeout", timeout)

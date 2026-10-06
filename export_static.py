@@ -53,6 +53,8 @@ def main():
 
     def localise(html):
         html = html.replace('href="/docs"', 'href="docs.html"').replace('href="/dashboard"', 'href="index.html"')
+        html = html.replace('\n      <a href="/account">My API keys</a>', "")   # no keys page in a snapshot
+        html = html.replace('<a href="/account">My API keys</a>', "My API keys")
         start = html.find('<form method="post" action="/logout">')
         if start != -1:
             html = html[:start] + html[html.index("</form>", start) + len("</form>"):]

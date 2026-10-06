@@ -38,6 +38,7 @@ import auth
 import store
 import triage
 import throttle
+import vault
 from sweep import USER_AGENT, Sweeper, parse_lastmod
 
 HERE = Path(__file__).resolve().parent
@@ -47,13 +48,30 @@ STAGES = ["discover", "crawl", "links", "signals", "triage", "contradictions", "
 DEAD_STATUSES = (403, 404)
 
 
-def provider_of(o):
-    """The AI provider config for a project's settings."""
+def provider_of(o, user_keys=None):
+    """The AI provider config for a project's settings. With user_keys (one user's decrypted
+    keys), the matching key rides along in cfg["api_key"]; nothing else is ever consulted."""
     if o["provider"] == "custom":
-        return triage.custom_provider(o["custom_url"], o["custom_model"], o["custom_key_env"])
-    if o["provider"] in triage.COMPATIBLE:
-        return triage.compatible_provider(o["provider"], o["custom_model"])
-    return triage.resolve(o["provider"])
+        cfg = triage.custom_provider(o["custom_url"], o["custom_model"], o["custom_key_env"])
+    elif o["provider"] in triage.COMPATIBLE:
+        cfg = triage.compatible_provider(o["provider"], o["custom_model"])
+    else:
+        cfg = dict(triage.resolve(o["provider"]))
+    if user_keys is not None:
+        cfg["api_key"] = user_keys.get(cfg["key_env"]) if cfg["key_env"] else None
+    return cfg
+
+
+def key_label(name):
+    return dict(known_keys()).get(name, name)
+
+
+def known_keys():
+    """Key names the My API keys page offers, with a friendly label for each."""
+    out = [(c["key_env"], label) for c, label in ((triage.PROVIDERS["anthropic"], "Anthropic"),
+                                                  (triage.PROVIDERS["xai"], "xAI (Grok)"))]
+    out += [(c["key_env"], c["label"]) for c in triage.COMPATIBLE.values() if c["key_env"]]
+    return out
 
 
 def ai_problem(cfg):
@@ -66,17 +84,15 @@ def ai_problem(cfg):
 
 
 def key_problem(cfg):
-    """Built-in providers may use the environment; every other key must be in .env."""
-    builtin = cfg["name"] in triage.PROVIDERS
-    if cfg["key_env"] and (not os.environ.get(cfg["key_env"]) or (not builtin and cfg["key_env"] not in triage.ENV_FILE_KEYS)):
-        return f"No {cfg['key_env']} set in .env"
+    """Every key comes from the user's own encrypted keys; the server's .env is not used."""
+    if cfg["key_env"] and not cfg.get("api_key"):
+        return f"No {key_label(cfg['key_env'])} key saved under My API keys"
     return None
 
 
-def env_keys():
-    """Names (never values) of .env keys a custom provider may use, for the form."""
-    return sorted(k for k in triage.ENV_FILE_KEYS
-                  if os.environ.get(k) and triage.CUSTOM_KEY_RE.match(k) and k not in triage.RESERVED_KEYS)
+def custom_key_names(names):
+    """Of a user's saved key names, those a custom endpoint may use."""
+    return sorted(k for k in names if triage.CUSTOM_KEY_RE.match(k) and k not in triage.RESERVED_KEYS)
 
 
 def analysis_key(finding, cfg):
@@ -92,14 +108,11 @@ def analysis_key(finding, cfg):
     return hashlib.sha256(json.dumps(material, sort_keys=True).encode()).hexdigest()
 
 
-def has_key(provider):
-    return bool(os.environ.get(triage.PROVIDERS[provider]["key_env"]))
-
-
 class Run:
     """All state for one run. The browser polls snapshot(); result() is what gets saved."""
 
-    def __init__(self, project, run_id):
+    def __init__(self, project, run_id, user):
+        self.user = user                 # whose API keys this run uses
         self.project_id = project["id"]
         self.project_name = project["name"]
         self.run_id = run_id
@@ -182,6 +195,7 @@ class Run:
                 "opts": self.opts,
                 "pace": self.pace["label"],
                 "model": self.model,
+                "started_by": self.user,
                 "started": self.started_iso,
                 "elapsed": (self.finished or time.time()) - self.started,
                 "stage": self.stage,
@@ -201,7 +215,7 @@ class Run:
     def summary(self):
         c = self.counts
         return {
-            "id": self.run_id, "site": self.opts["site"], "started": self.started_iso,
+            "id": self.run_id, "site": self.opts["site"], "started": self.started_iso, "started_by": self.user,
             "elapsed": (self.finished or time.time()) - self.started, "status": self.status,
             "counts": {k: c[k] for k in ("pages", "stale", "outdated", "dead_pages", "broken",
                                           "expired", "contradictions", "flagged", "dead", "unclear", "reused")},
@@ -315,7 +329,7 @@ def execute(run):
     out = store.run_dir(run.project_id, run.run_id)
     final = "failed"
     try:
-        cfg = provider_of(o)
+        cfg = provider_of(o, vault.get_keys(run.user))   # the starter's own keys, decrypted for this run only
         problem = ai_problem(cfg)
         ai_ok = not problem
         if (o["ai"] or o["contradictions"]) and problem:
@@ -602,7 +616,7 @@ def login_page(error=None, notice=None, username="", next_url=HOME):
 
 def landing_page(user):
     """The public product page; the top-right button depends on whether you're signed in."""
-    button = ('<a class="btn btn-navy" href="/dashboard">Open dashboard</a>' if user
+    button = ('<a class="btn btn-navy" href="/dashboard">Dashboard</a>' if user
               else '<a class="btn btn-navy" href="/login">Sign in</a>')
     return (HERE / "landing.html").read_text().replace("<!--ACCOUNT-->", button)
 
@@ -710,6 +724,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, (HERE / "dashboard.html").read_bytes(), "text/html; charset=utf-8")
         if path == "/docs":
             return self.send(200, (HERE / "docs.html").read_bytes(), "text/html; charset=utf-8")
+        if path == "/account":
+            return self.send(200, (HERE / "account.html").read_bytes(), "text/html; charset=utf-8")
+        if path == "/api/keys":
+            return self.send(200, {"keys": vault.list_keys(user["username"]),
+                                   "unreadable": vault.unreadable(user["username"]),
+                                   "known": [{"name": n, "label": l} for n, l in known_keys()]})
         if path == "/api/me":
             return self.send(200, user)
         if path == "/api/state":
@@ -721,9 +741,10 @@ class Handler(BaseHTTPRequestHandler):
             snap = run.snapshot(since, inventory=q.get("inv") == "1") if run else None
             return self.send(200, {"run": snap})
         if path == "/api/projects":
-            keys = {p: has_key(p) for p in triage.PROVIDERS}
+            names = set(vault.list_keys(user["username"]))
+            keys = {p: c["key_env"] in names for p, c in triage.PROVIDERS.items()}
             return self.send(200, {"projects": store.list_projects(), "profiles": throttle.PROFILES,
-                                   "keys": keys, "env_keys": env_keys(),
+                                   "keys": keys, "env_keys": custom_key_names(names), "saved_keys": sorted(names),
                                    "models": {p: c["model"] for p, c in triage.PROVIDERS.items()},
                                    "compatible": triage.COMPATIBLE})
         m = re.fullmatch(r"/api/projects/([a-z0-9-]+)/runs/([a-z0-9-]+)(/digest)?", path)
@@ -803,8 +824,23 @@ class Handler(BaseHTTPRequestHandler):
             auth.end_session(self.cookie(COOKIE))
             return self.redirect("/login?notice=signed_out", [self.set_cookie(COOKIE, "", 0)])
 
-        if not self.gate(self.path):
+        user = self.gate(self.path)
+        if not user:
             return
+        if self.path == "/api/keys":
+            name = str(body.get("name") or "").strip().upper()
+            if name not in dict(known_keys()) and triage.custom_key_problem(name):
+                return self.send(400, {"error": triage.custom_key_problem(name)})
+            if not name:
+                return self.send(400, {"error": "Choose which key this is."})
+            try:
+                vault.set_key(user["username"], name, body.get("value"))
+            except ValueError as e:
+                return self.send(400, {"error": str(e)})
+            return self.send(200, {"ok": True, "keys": vault.list_keys(user["username"])})
+        if self.path == "/api/keys/delete":
+            vault.delete_key(user["username"], str(body.get("name") or ""))
+            return self.send(200, {"ok": True, "keys": vault.list_keys(user["username"])})
         if self.path == "/api/projects":
             try:
                 return self.send(200, {"project": store.save_project(body)})
@@ -828,7 +864,7 @@ class Handler(BaseHTTPRequestHandler):
             project = store.get_project(body.get("project_id") or "")
             if not project:
                 return self.send(404, {"error": "Save the project first"})
-            run = Run(project, datetime.now().strftime("%Y%m%d-%H%M%S"))
+            run = Run(project, datetime.now().strftime("%Y%m%d-%H%M%S"), user["username"])
             CURRENT["run"] = run
             threading.Thread(target=execute, args=(run,), daemon=True).start()
             return self.send(200, {"ok": True, "run_id": run.run_id})
@@ -836,7 +872,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/list-models":
             o = store.clean_settings(body.get("settings"))
             try:
-                cfg = provider_of(o)
+                cfg = provider_of(o, vault.get_keys(user["username"]))
             except ValueError as e:
                 return self.send(200, {"ok": False, "message": str(e)})
             if not cfg["url"] or cfg.get("style") != "openai":
@@ -856,7 +892,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/test-provider":
             o = store.clean_settings(body.get("settings"))
             try:
-                cfg = provider_of(o)
+                cfg = provider_of(o, vault.get_keys(user["username"]))
             except ValueError as e:
                 return self.send(200, {"ok": False, "message": str(e)})
             problem = ai_problem(cfg)

@@ -69,7 +69,7 @@ def _read(path):
 
 
 def _write(path, data):
-    DIR.mkdir(mode=0o700, exist_ok=True)
+    DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(DIR, 0o700)
     tmp = path.with_suffix(".tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)

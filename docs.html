@@ -69,6 +69,7 @@
     <nav aria-label="Main">
       <a href="/dashboard">Dashboard</a>
       <a href="/docs" aria-current="page">Documents</a>
+      <a href="/account">My API keys</a>
     </nav>
     <form method="post" action="/logout"><button type="submit">Sign out</button></form>
   </div>
@@ -124,7 +125,7 @@
 .venv/bin/pip install -r requirements.txt</code></pre></li>
       <li>Create your account (you'll be asked for a password of at least 12 characters):
         <pre tabindex="0"><code>.venv/bin/python manage.py add-user yourname --admin</code></pre></li>
-      <li>Optional, for the AI steps: copy <code>.env.example</code> to <code>.env</code> and add <code>ANTHROPIC_API_KEY</code>.</li>
+      <li>For the AI steps, each person adds their own key after signing in, under <strong>My API keys</strong> (see section 13).</li>
       <li>Start the dashboard and open <a href="http://127.0.0.1:8765">http://127.0.0.1:8765</a>. That address shows the product page; <strong>Sign in</strong> (top right) takes you to the dashboard at <code>/dashboard</code>:
         <pre tabindex="0"><code>.venv/bin/python dashboard.py</code></pre></li>
       <li>Fill in a project name and site URL, choose a crawl speed, and press <strong>Start sweep</strong>.</li>
@@ -208,21 +209,21 @@
       <dt>Live</dt><dd>Still true, even if old. Charters, ordinances, contact pages and reference material are normally live.</dd>
     </dl>
     <h3 id="providers">Choosing the AI provider</h3>
-    <p>Each project picks its provider. Both AI steps, triage and contradictions, use it. The run header shows which model a run used.</p>
+    <p>Each project picks its provider. Both AI steps, triage and contradictions, use it. The run header shows which model a run used. <strong>A sweep always uses the API keys of the person who started it</strong>, saved under My API keys. Without a key for the chosen provider, the AI steps are skipped and the crawl still runs.</p>
     <div class="tw" tabindex="0" role="region" aria-label="AI providers"><table>
       <caption class="sr-only">AI providers</caption>
-      <thead><tr><th scope="col">Provider</th><th scope="col">Model</th><th scope="col">Key in <code>.env</code></th></tr></thead>
+      <thead><tr><th scope="col">Provider</th><th scope="col">Model</th><th scope="col">Key, under My API keys</th></tr></thead>
       <tbody>
         <tr><td>Anthropic</td><td>Set in <code>triage.py</code> (currently <code>claude-sonnet-4-6</code>)</td><td><code>ANTHROPIC_API_KEY</code></td></tr>
         <tr><td>xAI (Grok)</td><td>Set in <code>triage.py</code> (currently <code>grok-4</code>)</td><td><code>XAI_API_KEY</code></td></tr>
         <tr><td>Google Gemini, OpenAI, Groq, OpenRouter</td><td>Your choice. <strong>Load models</strong> lists what your account offers.</td><td><code>GEMINI_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>GROQ_API_KEY</code>, <code>OPENROUTER_API_KEY</code></td></tr>
         <tr><td>Ollama, LM Studio (local)</td><td>Your choice, from the app running on your computer</td><td>none</td></tr>
-        <tr><td>Other (custom endpoint)</td><td>Any model you name</td><td>Any key in <code>.env</code> ending in <code>_API_KEY</code> or <code>_TOKEN</code>, or none</td></tr>
+        <tr><td>Other (custom endpoint)</td><td>Any model you name</td><td>Any of your saved keys ending in <code>_API_KEY</code> or <code>_TOKEN</code>, or none</td></tr>
       </tbody>
     </table></div>
     <h3 id="named-services">Gemini, OpenAI, Groq, OpenRouter, Ollama and LM Studio</h3>
     <ol>
-      <li>Add the key to <code>.env</code> using the name in the table above, for example <code>GEMINI_API_KEY=…</code>, and restart the dashboard. Local apps need no key.</li>
+      <li>Save your key under <strong>My API keys</strong>. Local apps need no key.</li>
       <li>Choose the service under <strong>AI provider</strong>. The line below the form says whether its key was found.</li>
       <li>Press <strong>Load models</strong>, then pick a model from the <strong>Model</strong> box.</li>
       <li>Press <strong>Test connection</strong>. Service model lists can include models retired for new accounts. If so, the test shows the service's message, which usually names the replacement.</li>
@@ -232,11 +233,11 @@
     <dl>
       <dt>Endpoint URL</dt><dd>The service's base address. <code>/chat/completions</code> is added for you.</dd>
       <dt>Model name</dt><dd>Exactly as the service spells it.</dd>
-      <dt>API key from .env</dt><dd>Pick the key from the list of keys found in <code>.env</code> whose names end in <code>_API_KEY</code> or <code>_TOKEN</code>. The key itself never goes in the form or the project. Choose “None” for local models.</dd>
+      <dt>Your API key</dt><dd>Pick one of your saved keys whose name ends in <code>_API_KEY</code> or <code>_TOKEN</code>. The key itself never goes in the form or the project. Choose “None” for local models.</dd>
     </dl>
-    <p>Add the key to <code>.env</code> first and restart the dashboard so it appears in the list. Press <strong>Test connection</strong> to send a one-line request and see the reply, or the exact error, before you run a sweep.</p>
+    <p>Save the key under <strong>My API keys</strong> first, using <strong>Another service</strong>, so it appears in the list. Press <strong>Test connection</strong> to send a one-line request and see the reply, or the exact error, before you run a sweep.</p>
     <ul>
-      <li><strong>Only keys in <code>.env</code> are used.</strong> A key that exists only in your terminal's environment is ignored. The Anthropic and xAI keys can't be given to a custom endpoint. Together these mean nobody signed in to the dashboard can point a custom endpoint at their own server and collect one of your keys.</li>
+      <li><strong>Only your own keys are used.</strong> The dashboard never uses the server's keys or anyone else's, so a custom endpoint can only ever receive a key you saved yourself. Your Anthropic and xAI keys can't be given to a custom endpoint, to prevent mistakes.</li>
       <li>Newer OpenAI models want <code>max_completion_tokens</code> instead of <code>max_tokens</code>. The dashboard notices and retries automatically.</li>
       <li>Requests to these services wait up to five minutes, since local models can be slow. When a service is busy or rate-limited (429 or 503), the request is retried twice, honouring the service's Retry-After.</li>
       <li>Small local models may not follow the instructions well. They can return malformed answers, which are skipped, or weaker verdicts. Compare a run against one from a hosted model before relying on it.</li>
@@ -331,6 +332,16 @@ GOOGLE_ALLOWED_DOMAIN=yourcity.gov</code></pre></li>
     </ul>
     <p>The sign-in uses the standard secure authorisation flow (OpenID Connect with PKCE). The dashboard checks that the answer came from Google, was meant for this dashboard, is recent, matches the sign-in that was started, and belongs to a verified email in the allowed domain.</p>
     <div class="caution">Open the dashboard at the same address as the redirect URI (<code>127.0.0.1</code>, not <code>localhost</code>). Otherwise the browser can't match the sign-in and you'll be asked to try again.</div>
+    <h3 id="my-keys">My API keys</h3>
+    <p>Each person brings their own AI keys. Open <strong>My API keys</strong> in the top bar, paste a key next to its service and press Save. For a custom endpoint, use <strong>Another service</strong> and give the key a name ending in <code>_API_KEY</code> or <code>_TOKEN</code>.</p>
+    <ul>
+      <li>Keys are encrypted with AES-256-GCM before they're saved, each sealed to its owner and its name. A key copied into someone else's account won't decrypt.</li>
+      <li>After saving, a key is never shown again; you see only its last four characters. It's never logged, written to results, or sent to the browser.</li>
+      <li>Your keys are used only for sweeps, model lists and connection tests you start, and only sent to the service they belong to. Administrators can't read them from the dashboard.</li>
+      <li>The encryption's master key comes from the <code>SECRETS_KEY</code> setting, or locally from <code>auth/secret.key</code>, created on first use. If it's lost or changed, saved keys can't be read and each person saves theirs again. Keep it backed up and private.</li>
+      <li>Removing an account also removes its keys.</li>
+    </ul>
+    <p>The command-line scripts (<code>sweep.py</code>, <code>triage.py</code>, <code>agent.py</code>) still read keys from <code>.env</code>, because they run as whoever starts them.</p>
     <h3>Sessions</h3>
     <p>A sign-in lasts until you press <strong>Sign out</strong>, or after 24 hours without using the dashboard, and never longer than 30 days. Restarting the dashboard does not sign anyone out.</p>
 
@@ -346,7 +357,10 @@ GOOGLE_ALLOWED_DOMAIN=yourcity.gov</code></pre></li>
 .venv/bin/python manage.py remove-user sam
 .venv/bin/python manage.py sign-out                       # everyone, or: sign-out andy
 .venv/bin/python manage.py list                           # accounts, how they sign in, locked or not
-.venv/bin/python manage.py status                         # Google settings and redirect URI</code></pre>
+.venv/bin/python manage.py status                         # Google settings and redirect URI
+.venv/bin/python manage.py keys list andy                 # a user's saved key names (never the keys)
+.venv/bin/python manage.py keys import andy               # encrypt the AI keys in .env into andy's account
+.venv/bin/python manage.py keys remove andy GEMINI_API_KEY</code></pre>
     <p><strong>login-link</strong> prints an address that signs that person in once, then stops working. It expires after 10 minutes (change with <code>--minutes</code>). Use it when someone is locked out and can't wait, or when Google sign-in is down.</p>
     <p>For scripts, <code>add-user</code> and <code>set-password</code> accept <code>--password-stdin</code>.</p>
 
@@ -357,8 +371,8 @@ GOOGLE_ALLOWED_DOMAIN=yourcity.gov</code></pre></li>
       <li><strong>Stored locally</strong> in the project folder:
         <ul>
           <li><code>projects/</code>: settings, runs and remembered verdicts.</li>
-          <li><code>auth/</code>: accounts and sessions, readable only by your user.</li>
-          <li><code>.env</code>: API keys and Google settings.</li>
+          <li><code>auth/</code>: accounts, sessions and everyone's encrypted API keys, readable only by your user.</li>
+          <li><code>.env</code>: server settings such as Google sign-in, and the API keys used by the command-line scripts. Dashboard users' keys are kept encrypted in <code>auth/</code>, not here.</li>
         </ul>
         Keep <code>.env</code> and <code>auth/</code> out of version control. The included <code>.gitignore</code> does this.</li>
       <li><strong>Local only by default.</strong> The dashboard listens only on this computer (<code>127.0.0.1</code>). To share it with a team, put it behind HTTPS (a reverse proxy) and set <code>COOKIE_SECURE=1</code> in <code>.env</code>. Don't expose it over plain HTTP.</li>
@@ -375,7 +389,7 @@ GOOGLE_ALLOWED_DOMAIN=yourcity.gov</code></pre></li>
         <tr><td>Crawl speed</td><td>Polite</td><td>See section 5.</td></tr>
         <tr><td>Min / Max gap</td><td>2 / 5 s</td><td>Custom speed only.</td></tr>
         <tr><td>AI provider</td><td>Anthropic</td><td>Anthropic, xAI, or a custom OpenAI-compatible endpoint (section 8).</td></tr>
-        <tr><td>Endpoint URL / Model name / API key setting</td><td>empty</td><td>Custom provider only. The key setting is the name of a line in <code>.env</code>, never the key itself.</td></tr>
+        <tr><td>Endpoint URL / Model name / API key setting</td><td>empty</td><td>Custom provider only. The key setting is the name of one of your saved keys, never the key itself.</td></tr>
         <tr><td>Check links</td><td>On</td><td>Checks every link target. Turn it off for a faster crawl.</td></tr>
         <tr><td>AI triage of flagged pages</td><td>On</td><td>Live, dead or unclear verdicts.</td></tr>
         <tr><td>Reuse AI verdicts for unchanged pages</td><td>On</td><td>See section 9.</td></tr>
@@ -383,7 +397,7 @@ GOOGLE_ALLOWED_DOMAIN=yourcity.gov</code></pre></li>
         <tr><td>Groups to compare</td><td>12</td><td>Maximum groups sent for the contradiction check, from 1 to 40, one AI call each.</td></tr>
       </tbody>
     </table></div>
-    <p>Environment settings in <code>.env</code>: <code>ANTHROPIC_API_KEY</code>, <code>XAI_API_KEY</code>, <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code>, <code>GOOGLE_ALLOWED_DOMAIN</code>, <code>GOOGLE_REDIRECT_URI</code> (only if the dashboard runs at a different address), <code>COOKIE_SECURE</code>, and any key named in a custom provider's settings.</p>
+    <p>Environment settings in <code>.env</code> or the host: <code>SECRETS_KEY</code> (encrypts users' API keys), <code>ANTHROPIC_API_KEY</code> and <code>XAI_API_KEY</code> (command-line scripts only), <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code>, <code>GOOGLE_ALLOWED_DOMAIN</code>, <code>GOOGLE_REDIRECT_URI</code> (only if the dashboard runs at a different address), <code>COOKIE_SECURE</code>, and any key named in a custom provider's settings.</p>
 
     <h2 id="a11y">17. Accessibility</h2>
     <p>The dashboard, this page and the sign-in page are built to meet <strong>WCAG 2.2 level AA</strong>, which includes all of WCAG 2.1 AA, the level the U.S. ADA Title II rule requires of public-sector web content. WCAG 3 is still a draft and has no AA level yet.</p>
@@ -409,9 +423,11 @@ GOOGLE_ALLOWED_DOMAIN=yourcity.gov</code></pre></li>
       <dt>Google says <code>redirect_uri_mismatch</code></dt>
       <dd>The redirect URI in Google Cloud must match <code>manage.py status</code> character for character.</dd>
       <dt>The AI steps were skipped</dt>
-      <dd>No key for the selected provider. Add it to <code>.env</code> and restart. The project form warns about this before you start.</dd>
+      <dd>The person who started the sweep has no key saved for the project's provider. Add one under My API keys. The project form warns about this before you start.</dd>
+      <dt>“Saved, but can't be read”</dt>
+      <dd>The server's encryption key (<code>SECRETS_KEY</code> or <code>auth/secret.key</code>) changed. Save the key again.</dd>
       <dt>A custom provider doesn't work</dt>
-      <dd>Press <strong>Test connection</strong>. It shows the endpoint's own error, such as a wrong model name or an invalid key. “No … set in .env” means the key line is missing from <code>.env</code> or the dashboard hasn't been restarted since you added it.</dd>
+      <dd>Press <strong>Test connection</strong>. It shows the endpoint's own error, such as a wrong model name or an invalid key. “No … saved under My API keys” means you haven't saved a key for that service yet.</dd>
       <dt>The crawl is very slow</dt>
       <dd>Check the speed setting and the pace line under the step cards. “Slowed down” means the site asked for it. Respect that, or ask the site owner to allow the crawler.</dd>
       <dt>Everything shows as recently edited</dt>

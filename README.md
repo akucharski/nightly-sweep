@@ -185,6 +185,20 @@ Nightly, from cron:
 0 3 * * *  cd /opt/nightly-sweep && .venv/bin/python agent.py https://www.example.gov --mail-to webteam@example.gov >> agent-runs/cron.log 2>&1
 ```
 
+## Each person brings their own API keys
+
+In the dashboard, each signed-in person saves their own AI keys under **My API keys**. Sweeps
+use the keys of whoever started them; the server's `.env` keys are not used by the dashboard.
+Keys are encrypted with AES-256-GCM (`vault.py`), each sealed to its owner and name, and are
+never shown again after saving. The master key is `SECRETS_KEY`, or `auth/secret.key`, created
+on first use. To move the AI keys in your `.env` into your account:
+
+```bash
+python3 manage.py keys import yourname
+```
+
+The command-line scripts and `agent.py` still read `.env`, since they run as you.
+
 ## Deploy to Render
 
 `render.yaml` sets up one web service with a 1 GB persistent disk (a paid Starter plan, because
@@ -193,13 +207,14 @@ free services have no disk).
 1. In Render: **New → Blueprint**, pick this GitHub repository, and fill in the three settings it asks for:
    - `PUBLIC_URL`: the service's address, e.g. `https://nightly-sweep.onrender.com`
    - `ADMIN_USERNAME` and `ADMIN_PASSWORD`: the first admin account (password 12+ characters)
-2. In the service's **Environment → Secret Files**, add a file named `.env` containing your keys,
-   exactly as on your Mac (`ANTHROPIC_API_KEY=…`, `GEMINI_API_KEY=…`).
-3. Deploy, open the address, and sign in. Then delete `ADMIN_PASSWORD` from the settings. It is only
+2. Deploy, open the address, and sign in. Then delete `ADMIN_PASSWORD` from the settings. It is only
    used when there are no accounts at all.
+3. Each person adds their own AI keys under **My API keys**. They're encrypted with the
+   `SECRETS_KEY` that Render generates for the service; keep it, or saved keys can't be read.
+   (A Secret File named `.env` is only needed for server settings such as Google sign-in.)
 
 Projects, results and accounts are kept on the disk (`DATA_DIR=/var/data`), cookies are marked secure,
-and keys are read from the secret file (`ENV_FILE`). Run one instance only: a sweep's live progress is
+and each user's API keys are stored encrypted on the disk. Run one instance only: a sweep's live progress is
 held in memory. For Google sign-in, register `PUBLIC_URL/auth/google/callback` with Google.
 On your Mac none of these settings are set, so everything works as before.
 

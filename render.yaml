@@ -19,7 +19,9 @@ services:
         value: "1"
       - key: DATA_DIR              # projects/ and auth/ live on the disk
         value: /var/data
-      - key: ENV_FILE              # add a Secret File named .env with your API keys
+      - key: SECRETS_KEY           # master key that encrypts users' API keys; keep it, or saved keys are lost
+        generateValue: true
+      - key: ENV_FILE              # optional Secret File named .env for server settings (Google sign-in)
         value: /etc/secrets/.env
       - key: COOKIE_SECURE
         value: "1"
