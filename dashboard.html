@@ -43,6 +43,9 @@
   .topnav .who { color: var(--muted); font-size: 13px; margin-left: auto; overflow-wrap: anywhere; }
   .topnav form { margin: 0; }
   .linkbtn { background: none; border: 0; padding: 4px 0; color: var(--accent); text-decoration: underline; font-weight: 600; cursor: pointer; font-size: inherit; }
+  .keywarn { grid-column: 1 / -1; background: var(--warn-bg); color: var(--ink); border: 1px solid var(--warn); border-left-width: 4px;
+             border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+  .keywarn a { font-weight: 700; }
   .formerror { grid-column: 1 / -1; background: var(--bad-bg); color: var(--bad); border: 1px solid var(--bad); border-radius: 8px; padding: 8px 12px; font-size: 13px; }
   body { margin: 0; background: var(--bg); color: var(--ink);
          font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; }
@@ -258,6 +261,7 @@
         <span class="note" id="contraHelp">One AI call per group of related pages.</span>
       </div>
       <div class="formerror hidden" id="formError" role="alert"></div>
+      <div class="keywarn c6 hidden" id="keyWarn" role="status"></div>
       <div class="note c3 full-sm" id="note" aria-live="polite"></div>
       <div class="buttons c3 full-sm">
         <button type="button" class="ghost" id="deleteBtn">Delete project</button>
@@ -379,7 +383,7 @@ const STAGES = [
   ["digest", "Digest", "write report"],
 ];
 const SEV = ["high", "medium", "low"];
-let projects = [], profiles = {}, keys = {}, envKeys = [], savedKeys = [], models = {}, compatible = {};
+let projects = [], profiles = {}, keys = {}, envKeys = [], savedKeys = [], models = {}, compatible = {}, keyWarning = "";
 let pid = null, view = null, result = null, live = null;
 let since = 0, invCache = { run: null, data: [] }, logKey = null, savedHandled = null;
 let mainTab = ["stale", "contra", "all"].find(t => location.hash === "#" + t) || store.get("sweep.tab") || "stale", subFilter = "all", open = new Set();
@@ -482,8 +486,11 @@ function renderNote() {
     else if (!isCustom && !preset && !keys[prov]) needKey = `No ${prov === "xai" ? "xAI" : "Anthropic"} key saved under My API keys, so the AI steps will be skipped.`;
   }
   if (prov !== "custom" && models[prov]) msgs.push(`AI model: ${models[prov]}.`);
-  if (needKey) msgs.push(needKey);
-  n.className = "note c3 full-sm" + (needKey ? " warn" : "");
+  keyWarning = needKey;
+  const kw = $("keyWarn");
+  kw.classList.toggle("hidden", !needKey);
+  kw.innerHTML = needKey ? `${esc(needKey)} <a href="/account">Add your key under My API keys</a>, then come back here.` : "";
+  n.className = "note c3 full-sm";
   n.textContent = msgs.join(" ");
 }
 
@@ -492,8 +499,9 @@ async function loadProjects() {
   projects = d.projects; profiles = d.profiles; keys = d.keys; envKeys = d.env_keys || []; savedKeys = d.saved_keys || []; models = d.models || {};
   compatible = d.compatible || {};
   const ps = $("providerSel"), cur = ps.value;
-  ps.innerHTML = `<optgroup label="Built in"><option value="anthropic">Anthropic</option><option value="xai">xAI (Grok)</option></optgroup>` +
-    `<optgroup label="OpenAI-compatible">${Object.entries(compatible).map(([k, c]) => `<option value="${k}">${esc(c.label)}</option>`).join("")}` +
+  const noKey = has => has ? "" : " (no key saved)";
+  ps.innerHTML = `<optgroup label="Built in"><option value="anthropic">Anthropic${noKey(keys.anthropic)}</option><option value="xai">xAI (Grok)${noKey(keys.xai)}</option></optgroup>` +
+    `<optgroup label="OpenAI-compatible">${Object.entries(compatible).map(([k, c]) => `<option value="${k}">${esc(c.label)}${c.key_env ? noKey(savedKeys.includes(c.key_env)) : ""}</option>`).join("")}` +
     `<option value="custom">Other (custom endpoint)</option></optgroup>`;
   ps.value = cur || "anthropic";
   $("speedSel").innerHTML = Object.entries(profiles).map(([k, p]) =>
@@ -1074,6 +1082,7 @@ $("form").addEventListener("submit", async e => {
 $("start").addEventListener("click", async () => {
   showError("");
   if (!$("form").reportValidity()) return;
+  if (keyWarning && !confirm(`${keyWarning}\n\nStart the sweep without the AI steps anyway? Choose Cancel to add your key under My API keys first.`)) return;
   try {
     const p = await save();
     const d = await api.post("/api/start", { project_id: p.id });
