@@ -97,6 +97,7 @@
       <li><a href="#settings">Settings reference</a></li>
       <li><a href="#a11y">Accessibility</a></li>
       <li><a href="#trouble">Troubleshooting</a></li>
+      <li><a href="#mcp">Querying results from an agent</a></li>
     </ol>
   </nav>
 
@@ -435,7 +436,32 @@ GOOGLE_ALLOWED_DOMAIN=yourcity.gov</code></pre></li>
       <dt>“Address already in use” when starting</dt>
       <dd>Another copy is running. Stop it with <code>pkill -f dashboard.py</code>, then start again.</dd>
     </dl>
+    <h2 id="mcp">19. Querying results from an agent</h2>
+    <p><code>mcp_server.py</code> is a read-only <a href="https://modelcontextprotocol.io">MCP</a> connector onto everything under <code>projects/</code>. An MCP-aware agent &mdash; Claude Code, Claude Desktop, or anything else that speaks MCP &mdash; can ask it about saved sweeps: what a run found, how two runs compare, which pages a model judged dead. It has no tool that starts a sweep, changes a setting, or writes anything; Read is its only open claw, same as the rest of this project.</p>
+    <p>It only runs over stdio, spawned by a client already on this Mac, so there is no network listener and no separate sign-in: your file permissions are the access control.</p>
+    <h3>Claude Code</h3>
+    <pre tabindex="0"><code>claude mcp add -s user nightly-sweep -- /absolute/path/to/Sweeper/.venv/bin/python /absolute/path/to/Sweeper/mcp_server.py</code></pre>
+    <p><code>-s user</code> registers it for every project, not just this one. Then, in a new session, ask something like &ldquo;What did the last Suffolk VA sweep find?&rdquo; or &ldquo;Compare the two most recent Martin County runs.&rdquo;</p>
+    <h3>Claude Desktop</h3>
+    <p>Add a custom connector in <em>Settings</em> pointing at the same command and arguments as above. The exact menu differs by app version &mdash; look for <em>Settings &rarr; Connectors</em> or <em>Developer &rarr; Edit Config</em>. Older versions use a JSON file instead:</p>
+    <pre tabindex="0"><code>{ "mcpServers": { "nightly-sweep": {
+    "command": "/absolute/path/to/Sweeper/.venv/bin/python",
+    "args": ["/absolute/path/to/Sweeper/mcp_server.py"] } } }</code></pre>
+    <h3>What it can answer</h3>
+    <div class="tw" tabindex="0" role="region" aria-label="MCP tools"><table>
+      <caption class="sr-only">MCP tools exposed by mcp_server.py</caption>
+      <thead><tr><th scope="col">Tool</th><th scope="col">Answers</th></tr></thead>
+      <tbody>
+        <tr><td><code>list_projects</code></td><td>Every saved project, its site, and its runs. Start here.</td></tr>
+        <tr><td><code>list_runs</code></td><td>Every saved run of one project, newest first, with headline counts.</td></tr>
+        <tr><td><code>get_run_report</code></td><td>Everything one run found: flagged pages, contradictions, AI verdicts and evidence.</td></tr>
+        <tr><td><code>get_findings</code></td><td>One category only &mdash; stale, outdated wording, dead/unclear/live, broken links, expired events, or dead pages.</td></tr>
+        <tr><td><code>get_digest</code></td><td>The Markdown report, the same text the nightly email sends.</td></tr>
+        <tr><td><code>compare_runs</code></td><td>What's new or resolved between two runs of the same project.</td></tr>
+      </tbody>
+    </table></div>
     <p class="top"><a href="#main">Back to top</a></p>
+
   </article>
   </main>
 </div>

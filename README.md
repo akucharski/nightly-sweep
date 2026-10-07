@@ -218,3 +218,39 @@ and each user's API keys are stored encrypted on the disk. Run one instance only
 held in memory. For Google sign-in, register `PUBLIC_URL/auth/google/callback` with Google.
 On your Mac none of these settings are set, so everything works as before.
 
+
+## Querying results from an agent (MCP)
+
+`mcp_server.py` is a read-only [MCP](https://modelcontextprotocol.io) connector onto
+everything under `./projects`: every saved project, every run, its findings, its
+contradictions, and the digest. An MCP-aware agent can ask it questions like "what's
+new since last week's Suffolk sweep" without touching the crawler, a live site, or any
+API key. It has no tool that writes, deletes, or starts anything — Read is its only
+open claw, same as the rest of this project.
+
+It only runs over stdio, spawned by a client already on this machine, so there's no
+network listener and no separate login: your Mac's file permissions are the whole
+access control.
+
+**Claude Code** (this registers it for every project, not just this one):
+
+```bash
+claude mcp add -s user nightly-sweep -- /absolute/path/to/Sweeper/.venv/bin/python /absolute/path/to/Sweeper/mcp_server.py
+```
+
+Then ask a fresh session something like "What did the last Suffolk VA sweep find?" or
+"Compare the two most recent Martin County runs."
+
+**Claude Desktop:** add a custom connector in Settings pointing at the same command and
+args as above (the exact menu differs by app version; look for *Settings → Connectors*
+or *Developer → Edit Config*). Older versions use a JSON file instead:
+
+```json
+{ "mcpServers": { "nightly-sweep": {
+    "command": "/absolute/path/to/Sweeper/.venv/bin/python",
+    "args": ["/absolute/path/to/Sweeper/mcp_server.py"] } } }
+```
+
+Six tools: `list_projects`, `list_runs`, `get_run_report`, `get_findings` (filtered by
+category), `get_digest` (the Markdown report), and `compare_runs` (what's new or fixed
+between two runs of the same project).

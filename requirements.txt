@@ -3,3 +3,4 @@ beautifulsoup4>=4.12
 lxml>=5.0
 anthropic>=1.11
 cryptography>=42
+mcp>=2.0
